@@ -99,6 +99,46 @@ router.get('/benqi/account/:address', async (req, res) => {
   }
 });
 
+/**
+ * GET /benqi/account/:address/positions
+ * Returns lending positions in the format expected by the miniapp LendingApiClient.
+ * Maps execution layer /avax/lending/position/:address → { data: LendingAccountPositionsResponse }
+ */
+router.get('/benqi/account/:address/positions', async (req, res) => {
+  try {
+    const address = req.params.address;
+    const data = await getFromExecutionLayer(`/avax/lending/position/${address}`);
+    if (data.error) return res.status(500).json({ error: data.error });
+
+    const positions = (data.positions || []).map((p) => ({
+      chainId: 43114,
+      protocol: 'benqi',
+      qTokenAddress: p.qTokenAddress,
+      qTokenSymbol: p.qTokenSymbol,
+      underlyingAddress: p.underlyingAddress ?? 'native',
+      underlyingSymbol: p.underlyingSymbol,
+      underlyingDecimals: p.underlyingDecimals ?? 18,
+      qTokenDecimals: 8,
+      qTokenBalanceWei: p.qTokenBalance,
+      suppliedWei: p.suppliedWei ?? '0',
+      borrowedWei: p.borrowedWei ?? '0',
+      collateralEnabled: true,
+    }));
+
+    res.json({
+      data: {
+        accountAddress: address,
+        liquidity: { accountAddress: address, liquidity: '0', shortfall: '0', isHealthy: true },
+        positions,
+        updatedAt: Date.now(),
+      },
+    });
+  } catch (err) {
+    console.error('[executionLayerProxy] account positions error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch positions from execution layer' });
+  }
+});
+
 // ─── Lending Actions ─────────────────────────────────────────────────────────
 
 /**
