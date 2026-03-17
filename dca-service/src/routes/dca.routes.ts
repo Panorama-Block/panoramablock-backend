@@ -253,8 +253,9 @@ export function dcaRoutes() {
       // ── Base chain → DCAVault (non-custodial, returns unsigned bundle) ─────
       if (request.fromChainId === 8453) {
         console.log('[POST /create-strategy] Base chain detected, routing to DCAVault');
-        // Use authenticated wallet address — not the smart account — as the vault order owner
-        const walletAddress = req.user?.id || request.userAddress;
+        // Use the selected smart wallet as the vault order owner so the keeper
+        // executes on behalf of that address (not the raw EOA).
+        const walletAddress = request.smartAccountId || req.user?.id || request.userAddress;
         if (!walletAddress) {
           return res.status(400).json({ error: 'Could not determine wallet address for Base DCA' });
         }

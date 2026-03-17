@@ -29,6 +29,32 @@ type RequestWithUser = Request & {
   user?: { address: string; [k: string]: any };
 };
 
+const EXECUTION_LAYER_URL = process.env.EXECUTION_LAYER_URL || 'http://localhost:3011';
+const AVAX_CHAIN_ID = 43114;
+
+// Known AVAX token decimals for amount conversion
+const AVAX_TOKEN_DECIMALS: Record<string, number> = {
+  '0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7': 18, // WAVAX
+  'native': 18,                                       // AVAX native
+  '0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e': 6,  // USDC
+  '0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7': 6,  // USDT
+  '0xa7d7079b0fead91f3e65f86e8915cb59c1a4c664': 6,  // USDC.e
+  '0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab': 18, // WETH.e
+  '0x152b9d0fdc40c096757f570a51e494bd4b943e50': 8,  // BTC.b
+};
+
+function toAvaxWei(amount: string, tokenAddress: string): string {
+  const decimals = AVAX_TOKEN_DECIMALS[tokenAddress.toLowerCase()] ?? 18;
+  if (amount.includes('.')) {
+    const [int, frac = ''] = amount.split('.');
+    const fracPadded = frac.padEnd(decimals, '0').slice(0, decimals);
+    return (BigInt(int) * BigInt(10 ** decimals) + BigInt(fracPadded || '0')).toString();
+  }
+  // Already looks like wei if it's a large integer
+  if (/^\d+$/.test(amount) && amount.length > 12) return amount;
+  return (BigInt(amount) * BigInt(10 ** decimals)).toString();
+}
+
 export class SwapController {
   constructor(
     private readonly getQuoteUseCase: GetQuoteUseCase,
@@ -37,6 +63,82 @@ export class SwapController {
     private readonly getSwapHistoryUseCase: GetSwapHistoryUseCase,
     private readonly getSwapStatusUseCase: GetSwapStatusUseCase
   ) {}
+
+  // ─── AVAX Swap Proxy ────────────────────────────────────────────────────────
+
+  private proxyAvaxQuote = async (
+    fromToken: string, toToken: string, amountWei: string,
+    fromChainId: number, toChainId: number, res: Response, next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const execRes = await fetch(`${EXECUTION_LAYER_URL}/avax/swap/quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tokenIn: fromToken, tokenOut: toToken, amountIn: amountWei, slippageBps: 50 }),
+      });
+      const execData = await execRes.json() as any;
+      if (execData.error) {
+        console.error('[SwapController] AVAX quote error from execution layer:', execData.error);
+        return next(new SwapError(SwapErrorCode.PROVIDER_ERROR, execData.error?.message || 'AVAX quote failed'));
+      }
+      const amountOut: string = execData.amountOut ?? '0';
+      const amountIn: string = execData.amountIn ?? amountWei;
+      const rate = amountIn !== '0' ? (Number(amountOut) / Number(amountIn)).toFixed(8) : '0';
+      return res.json({
+        success: true,
+        quote: {
+          fromChainId,
+          toChainId,
+          fromToken,
+          toToken,
+          amount: amountIn,
+          estimatedReceiveAmount: amountOut,
+          exchangeRate: rate,
+          fees: { gasFee: '0', bridgeFee: '0', totalFee: '0', totalFeeUsd: '0' },
+          provider: 'trader-joe',
+        },
+      });
+    } catch (err) {
+      console.error('[SwapController] AVAX quote proxy failed:', err);
+      return next(new SwapError(SwapErrorCode.PROVIDER_ERROR, 'AVAX quote proxy failed'));
+    }
+  };
+
+  private proxyAvaxPrepare = async (
+    fromToken: string, toToken: string, amountWei: string,
+    sender: string, fromChainId: number, res: Response, next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const execRes = await fetch(`${EXECUTION_LAYER_URL}/avax/swap/prepare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress: sender, tokenIn: fromToken, tokenOut: toToken, amountIn: amountWei, slippageBps: 50, deadlineMinutes: 20 }),
+      });
+      const execData = await execRes.json() as any;
+      if (execData.error) {
+        console.error('[SwapController] AVAX prepare error from execution layer:', execData.error);
+        return next(new SwapError(SwapErrorCode.PROVIDER_ERROR, execData.error?.message || 'AVAX prepare failed'));
+      }
+      // Map bundle.steps → prepared.transactions (format expected by miniapp)
+      const steps: any[] = execData.bundle?.steps ?? [];
+      const transactions = steps.map((s: any) => ({
+        to: s.to,
+        data: s.data,
+        value: s.value ?? '0',
+        chainId: s.chainId ?? AVAX_CHAIN_ID,
+      }));
+      return res.json({
+        success: true,
+        prepared: { transactions },
+        provider: 'trader-joe',
+      });
+    } catch (err) {
+      console.error('[SwapController] AVAX prepare proxy failed:', err);
+      return next(new SwapError(SwapErrorCode.PROVIDER_ERROR, 'AVAX prepare proxy failed'));
+    }
+  };
+
+  // ─── Quote ──────────────────────────────────────────────────────────────────
 
   public getQuote = async (
     req: Request,
@@ -87,6 +189,14 @@ export class SwapController {
           `[SwapController] ⚠️ Missing unit in /swap/quote request; inferred '${resolvedUnit}'. Callers should always send unit explicitly.`
         );
       }
+
+      // ── AVAX routing ──────────────────────────────────────────────────────
+      if (fromChainId === AVAX_CHAIN_ID) {
+        console.log('[SwapController] AVAX chain detected — routing quote to execution layer');
+        const amountWei = resolvedUnit === 'wei' ? amount : toAvaxWei(amount, fromToken!);
+        return this.proxyAvaxQuote(fromToken!, toToken!, amountWei, fromChainId, toChainId!, res, next);
+      }
+      // ─────────────────────────────────────────────────────────────────────
 
       const sender = smartAccountAddress
       console.log(`[SwapController] Getting quote for user: ${sender}`);
@@ -164,6 +274,14 @@ export class SwapController {
           `[SwapController] ⚠️ Missing unit in /swap/tx request; inferred '${resolvedUnit}'. Callers should always send unit explicitly.`
         );
       }
+
+      // ── AVAX routing ──────────────────────────────────────────────────────
+      if (fromChainId === AVAX_CHAIN_ID) {
+        console.log('[SwapController] AVAX chain detected — routing prepare to execution layer');
+        const amountWei = resolvedUnit === 'wei' ? amount : toAvaxWei(amount, fromToken!);
+        return this.proxyAvaxPrepare(fromToken!, toToken!, amountWei, sender!, fromChainId, res, next);
+      }
+      // ─────────────────────────────────────────────────────────────────────
 
       console.log(`[SwapController] Preparing with${preferredProvider ? ` preferred provider: ${preferredProvider}` : ' auto-select'}`);
 
