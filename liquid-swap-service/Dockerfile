@@ -6,14 +6,14 @@ WORKDIR /app
 RUN apk add --no-cache python3 py3-setuptools make g++
 
 # Copy package files (sem lockfile para evitar conflitos de integridade no CI)
-COPY liquid-swap-service/package.json ./package.json
+COPY package.json ./package.json
 RUN npm install --legacy-peer-deps --force
 
-# Copy shared directory (from backend root context)
+# Copy shared directory (token-registry.json is pre-staged by CI into shared/)
 COPY shared ./shared
 
 # Copy source code
-COPY liquid-swap-service/. .
+COPY . .
 
 # Build TypeScript
 RUN npm run build
