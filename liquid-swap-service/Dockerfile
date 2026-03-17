@@ -6,11 +6,14 @@ WORKDIR /app
 RUN apk add --no-cache python3 py3-setuptools make g++
 
 # Copy package files (sem lockfile para evitar conflitos de integridade no CI)
-COPY package.json ./
+COPY liquid-swap-service/package.json ./package.json
 RUN npm install --legacy-peer-deps --force
 
+# Copy shared directory (from backend root context)
+COPY shared ./shared
+
 # Copy source code
-COPY . .
+COPY liquid-swap-service/. .
 
 # Build TypeScript
 RUN npm run build
@@ -29,7 +32,7 @@ COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/shared ./shared
 
 # Expose port
-EXPOSE 3003
+EXPOSE 3002
 
 # Run the application
 CMD ["npm", "start"]

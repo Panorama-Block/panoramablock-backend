@@ -139,8 +139,8 @@ services:
 
   liquid_swap_service:
     build:
-      context: ./liquid-swap-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: liquid-swap-service/Dockerfile
     container_name: panorama-liquid-swap
     ports:
       - "${LIQUID_SWAP_PORT}:3002"
