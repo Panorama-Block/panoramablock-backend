@@ -12,6 +12,8 @@ const validationRoutes = require('./routes/validationRoutes');
 const validationSwapRoutes = require('./routes/validationSwapRoutes');
 const benqiRoutes = require('./routes/benqiRoutes');
 const benqiValidationRoutes = require('./routes/benqiValidationRoutes');
+// Execution layer proxy — routes AVAX operations to the execution layer service
+const executionLayerRoutes = require('./routes/executionLayerRoutes');
 
 // Importa configurações
 const { NETWORKS, RATE_LIMIT, SECURITY, VALIDATION } = require('./config/constants');
@@ -216,9 +218,14 @@ app.get('/config', (req, res) => {
 });
 
 // Registra as rotas
+// Execution layer proxy takes priority over legacy routes
+// (benqi/markets, benqi/account, benqi-validation/*, liquid-staking/*)
+app.use('/', executionLayerRoutes);
+
 app.use('/dex', traderJoeRoutes);
 app.use('/validation', validationRoutes);
 app.use('/validation-swap', validationSwapRoutes);
+// Legacy benqi routes remain as fallback if execution layer is down
 app.use('/benqi', benqiRoutes);
 app.use('/benqi-validation', benqiValidationRoutes);
 
