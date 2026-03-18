@@ -29,7 +29,7 @@ type RequestWithUser = Request & {
   user?: { address: string; [k: string]: any };
 };
 
-const EXECUTION_LAYER_URL = process.env.EXECUTION_LAYER_URL || 'http://localhost:3011';
+const EXECUTION_LAYER_URL = process.env.EXECUTION_LAYER_URL || 'http://localhost:3010';
 const AVAX_CHAIN_ID = 43114;
 
 // Known AVAX token decimals for amount conversion
