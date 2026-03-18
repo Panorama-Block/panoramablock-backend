@@ -23,7 +23,7 @@ export class AerodromeProviderAdapter implements ISwapProvider {
   private readonly client: AxiosInstance;
 
   constructor() {
-    const base = process.env.EXECUTION_SERVICE_URL || "http://localhost:3010";
+    const base = process.env.EXECUTION_SERVICE_URL || process.env.EXECUTION_LAYER_URL || "http://localhost:3010";
     // As rotas do swap-provider na execution-layer estão montadas em /provider/swap
     const baseURL = `${base.replace(/\/+$/, "")}/provider/swap`;
     this.client = axios.create({
