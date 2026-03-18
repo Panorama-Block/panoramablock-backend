@@ -5,15 +5,15 @@ WORKDIR /app
 # Native deps (thirdweb/metamask deps include native modules like bufferutil)
 RUN apk add --no-cache python3 py3-setuptools make g++
 
-# Copy package files (sem lockfile para evitar conflitos de integridade no CI)
-COPY package.json ./package.json
+# Copy package files
+COPY liquid-swap-service/package.json ./package.json
 RUN npm install --legacy-peer-deps --force
 
 # Copy shared directory (token-registry.json is pre-staged by CI into shared/)
 COPY shared ./shared
 
 # Copy source code
-COPY . .
+COPY liquid-swap-service/ .
 
 # Build TypeScript
 RUN npm run build
