@@ -387,7 +387,8 @@ export class UniswapSmartRouterAdapter implements ISwapProvider {
             data: approveCalldata,
             value: '0',
             chainId,
-            gasLimit: BigNumber.from(60_000).toString()
+            gasLimit: BigNumber.from(60_000).toString(),
+            feeMode: 'advisory' as const,
           });
 
           console.log(
@@ -409,7 +410,8 @@ export class UniswapSmartRouterAdapter implements ISwapProvider {
         chainId: chainId,
         gasLimit: paddedGasLimit.toString(),
         maxFeePerGas: gasPriceWei.gt(0) ? gasPriceWei.toString() : undefined,
-        maxPriorityFeePerGas: gasPriceWei.gt(0) ? gasPriceWei.toString() : undefined
+        maxPriorityFeePerGas: gasPriceWei.gt(0) ? gasPriceWei.toString() : undefined,
+        feeMode: 'advisory' as const,
       };
 
       transactions.push(swapTx);

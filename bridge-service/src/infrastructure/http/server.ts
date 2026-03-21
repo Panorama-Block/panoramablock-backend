@@ -11,11 +11,13 @@ import { logger } from '../utils/logger';
 // Route handlers
 import { createHealthRoutes } from '../http/routes/healthRoutes';
 import { createTonBridgeRoutes } from '../http/routes/tonBridgeRoutes';
+import { createPanoramaV1Routes } from '../http/routes/panoramaV1Routes';
 
 // Middleware
 import { errorHandlingMiddleware } from '../http/middleware/errorHandlingMiddleware';
 import { loggingMiddleware } from '../http/middleware/loggingMiddleware';
 import { tracingMiddleware } from '../http/middleware/tracingMiddleware';
+import { panoramaAuthMiddleware } from '../http/middleware/panoramaAuthMiddleware';
 
 export async function createHttpServer(app: Application, container: DIContainer): Promise<void> {
   const securityConfig = getSecurityConfig();
@@ -44,7 +46,7 @@ export async function createHttpServer(app: Application, container: DIContainer)
     origin: securityConfig.cors.origin,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Trace-ID', 'X-User-ID'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Trace-ID', 'X-User-ID', 'X-API-Key', 'X-Tenant-ID'],
     optionsSuccessStatus: 204
   };
   app.use(cors(corsOptions));
@@ -97,6 +99,7 @@ export async function createHttpServer(app: Application, container: DIContainer)
   // I will assume public for now or add basic auth if requested.
   // The prompt didn't specify auth requirements for the new endpoint.
   app.use('/api/bridge', createTonBridgeRoutes(container));
+  app.use('/v1', panoramaAuthMiddleware(securityConfig.jwt), createPanoramaV1Routes(container));
 
   // API root endpoint
   app.get('/api', (req: Request, res: Response) => {
@@ -106,7 +109,8 @@ export async function createHttpServer(app: Application, container: DIContainer)
       architecture: 'Hexagonal (Domain-Driven Design)',
       health: '/health',
       endpoints: {
-        bridge: '/api/bridge/transaction'
+        bridge: '/api/bridge/transaction',
+        panoramaV1: '/v1'
       },
       timestamp: new Date().toISOString()
     });

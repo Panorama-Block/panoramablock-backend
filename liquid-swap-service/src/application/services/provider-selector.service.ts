@@ -6,7 +6,7 @@ import { SwapError } from "../../domain/entities/errors";
 import { PreparedSwap } from "../../domain/ports/swap.provider.port";
 
 const PROVIDER_ALIAS_PRIORITY: Record<string, string[]> = {
-  uniswap: ["uniswap-smart-router", "uniswap-trading-api"],
+  uniswap: ["uniswap-trading-api"],
 };
 
 /**
@@ -190,8 +190,12 @@ export class ProviderSelectorService {
     // NOTE: Smart Router temporarily disabled due to V4 subgraph issues
     const isSameChain = request.fromChainId === request.toChainId;
     const providerPriority = isSameChain
-      ? ["uniswap-trading-api", "uniswap", "thirdweb"]
-      : ["thirdweb", "uniswap-trading-api", "uniswap"];
+      ? ["thirdweb", "uniswap-trading-api"]
+      : ["thirdweb", "uniswap-trading-api"];
+
+    console.log(
+      `[ProviderSelectorService] Route mode: ${isSameChain ? 'same-chain' : 'cross-chain'}; candidate priority: ${providerPriority.join(', ')}`
+    );
 
     const errors: string[] = [];
     let lastSwapError: SwapError | null = null;
@@ -259,6 +263,11 @@ export class ProviderSelectorService {
 
     // All providers failed - if we have a SwapError, throw it directly for proper handling
     if (lastSwapError) {
+      if (!isSameChain && providerPriority[0] === 'thirdweb') {
+        console.warn(
+          '[ProviderSelectorService] Cross-chain prepare exhausted available providers. Thirdweb is the primary cross-chain provider in this stack.'
+        );
+      }
       throw lastSwapError;
     }
 

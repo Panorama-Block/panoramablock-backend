@@ -35,8 +35,29 @@ const EnvironmentSchema = z.object({
   // External service URLs
   AUTH_SERVICE_URL: z.string().url().optional(),
   LIQUID_SWAP_SERVICE_URL: z.string().url().optional(),
+  LIQUID_SWAP_TIMEOUT_MS: z.preprocess(
+    (v) => (typeof v === 'string' ? parseInt(v, 10) : v),
+    z.number().optional()
+  ),
+  LIQUID_SWAP_RETRY_ATTEMPTS: z.preprocess(
+    (v) => (typeof v === 'string' ? parseInt(v, 10) : v),
+    z.number().optional()
+  ),
+  LIQUID_SWAP_RETRY_BACKOFF_MS: z.preprocess(
+    (v) => (typeof v === 'string' ? parseInt(v, 10) : v),
+    z.number().optional()
+  ),
   LIDO_SERVICE_URL: z.string().url().optional(),
+  LENDING_SERVICE_URL: z.string().url().optional(),
   AVAX_SERVICE_URL: z.string().url().optional(),
+  DB_GATEWAY_URL: z.string().url().optional(),
+  DB_GATEWAY_SERVICE_TOKEN: z.string().optional(),
+  DB_GATEWAY_TENANT_ID: z.string().optional(),
+  DB_GATEWAY_SYNC_ENABLED: z.string().transform(v => v === 'true').optional(),
+  DB_GATEWAY_TIMEOUT_MS: z.preprocess(
+    (v) => (typeof v === 'string' ? parseInt(v, 10) : v),
+    z.number().optional()
+  ),
 
   // Protocol configuration
   LIDO_CONTRACT_ADDRESS: z.string().optional(),
@@ -63,6 +84,32 @@ const EnvironmentSchema = z.object({
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
   SENTRY_DSN: z.string().optional(),
   DEBUG: z.string().transform(v => v === 'true').default('false'),
+  PANORAMA_API_KEY: z.string().optional(),
+  WALLET_PROVIDER_DEFAULT: z.enum(['thirdweb', 'wdk']).default('wdk'),
+  WDK_SUPPORTED_CHAINS: z.string().default('evm,ton'),
+  WDK_EVM_RPC_URL: z.string().url().optional(),
+  WDK_TON_RPC_URL: z.string().url().optional(),
+  WDK_SEED: z.string().optional(),
+  WDK_REQUIRE_SESSION: z.string().transform(v => v !== 'false').default('true'),
+  WDK_SIMULATE_EXECUTION: z.string().transform(v => v === 'true').default('false'),
+  THIRDWEB_ENGINE_URL: z.string().url().optional(),
+  ENGINE_ACCESS_TOKEN: z.string().optional(),
+  WEBHOOK_DELIVERY_TIMEOUT_MS: z.preprocess(
+    (v) => (typeof v === 'string' ? parseInt(v, 10) : v),
+    z.number().optional()
+  ),
+  WEBHOOK_DELIVERY_RETRIES: z.preprocess(
+    (v) => (typeof v === 'string' ? parseInt(v, 10) : v),
+    z.number().optional()
+  ),
+  WEBHOOK_DELIVERY_RETRY_BACKOFF_MS: z.preprocess(
+    (v) => (typeof v === 'string' ? parseInt(v, 10) : v),
+    z.number().optional()
+  ),
+  WALLET_ADAPTER_TIMEOUT_MS: z.preprocess(
+    (v) => (typeof v === 'string' ? parseInt(v, 10) : v),
+    z.number().optional()
+  ),
 
   // Testing configuration
   TEST_TIMEOUT: z.string().transform(Number).optional(),
@@ -175,6 +222,7 @@ export const getServiceUrls = () => {
     auth: config.AUTH_SERVICE_URL,
     liquidSwap: config.LIQUID_SWAP_SERVICE_URL,
     lido: config.LIDO_SERVICE_URL,
+    lending: config.LENDING_SERVICE_URL,
     avax: config.AVAX_SERVICE_URL
   };
 };

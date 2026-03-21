@@ -25,8 +25,10 @@ export interface Transaction {
   data: string;
   value: string; // Wei as string (BigInt serialized)
   gasLimit?: string;
+  gasPrice?: string;
   maxFeePerGas?: string;
   maxPriorityFeePerGas?: string;
+  feeMode?: 'authoritative' | 'advisory';
   action?: string;
   description?: string;
 }

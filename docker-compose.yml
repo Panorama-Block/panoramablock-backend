@@ -127,6 +127,7 @@ services:
       - LAYERSWAP_API_KEY=${LAYERSWAP_API_KEY}
       - DATABASE_URL=postgresql://tac_service:tac_service_password@engine_postgres:5432/tac_service?schema=public
       - LAYERSWAP_TON_VAULT=${LAYERSWAP_TON_VAULT}
+      - TOKEN_REGISTRY_PATH=/app/shared/token-registry.json
     env_file:
       - .env
     depends_on:
@@ -135,6 +136,8 @@ services:
       engine_postgres_bootstrap:
         condition: service_completed_successfully
     restart: always
+    volumes:
+      - ./shared/token-registry.json:/app/shared/token-registry.json:ro
 
 
   liquid_swap_service:

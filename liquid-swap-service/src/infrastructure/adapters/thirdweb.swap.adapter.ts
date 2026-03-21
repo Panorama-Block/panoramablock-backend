@@ -1,6 +1,7 @@
 // Infrastructure Adapters (non-custodial V1) - Using REST API directly
 import { createThirdwebClient, Bridge } from "thirdweb";
 import axios from "axios";
+import { utils as ethersUtils } from "ethers";
 import {
   SwapRequest,
   SwapQuote,
@@ -13,6 +14,21 @@ import { resolveToken } from "../../config/tokens/registry";
 import { mapThirdwebError, mapThirdwebStatusError } from "./thirdweb.error.mapper";
 
 const BRIDGE_API = "https://bridge.thirdweb.com/v1";
+const THIRDWEB_NATIVE_TOKEN_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
+
+function normalizeThirdwebAddress(address: string): string {
+  return ethersUtils.getAddress(address.toLowerCase());
+}
+
+function normalizeThirdwebTokenIdentifier(
+  identifier: string,
+  isNative: boolean
+): string {
+  if (isNative) {
+    return THIRDWEB_NATIVE_TOKEN_ADDRESS;
+  }
+  return normalizeThirdwebAddress(identifier);
+}
 
 /**
  * Fix EIP-1559 gas parameters if they are invalid.
@@ -121,16 +137,26 @@ export class ThirdwebSwapAdapter implements ISwapService {
 
       const originToken = resolveToken("thirdweb", swapRequest.fromChainId, swapRequest.fromToken);
       const destinationToken = resolveToken("thirdweb", swapRequest.toChainId, swapRequest.toToken);
+      const originTokenAddress = normalizeThirdwebTokenIdentifier(
+        originToken.identifier,
+        originToken.isNative
+      );
+      const destinationTokenAddress = normalizeThirdwebTokenIdentifier(
+        destinationToken.identifier,
+        destinationToken.isNative
+      );
 
       console.log("[ThirdwebSwapAdapter] Resolved tokens:", {
         origin: {
-          identifier: originToken.identifier,
+          identifier: originTokenAddress,
+          rawIdentifier: originToken.identifier,
           isNative: originToken.isNative,
           address: originToken.metadata.address,
           symbol: originToken.metadata.symbol,
         },
         destination: {
-          identifier: destinationToken.identifier,
+          identifier: destinationTokenAddress,
+          rawIdentifier: destinationToken.identifier,
           isNative: destinationToken.isNative,
           address: destinationToken.metadata.address,
           symbol: destinationToken.metadata.symbol,
@@ -143,9 +169,10 @@ export class ThirdwebSwapAdapter implements ISwapService {
       const response = await axios.get(`${BRIDGE_API}/sell/quote`, {
         params: {
           originChainId: swapRequest.fromChainId,
-          originTokenAddress: originToken.identifier,
+          originTokenAddress,
           destinationChainId: swapRequest.toChainId,
-          destinationTokenAddress: destinationToken.identifier,
+          destinationTokenAddress,
+          sellAmountWei: sellAmountWei.toString(),
           amount: sellAmountWei.toString(),
         },
         headers: {
@@ -200,15 +227,28 @@ export class ThirdwebSwapAdapter implements ISwapService {
     try {
       const originToken = resolveToken("thirdweb", swapRequest.fromChainId, swapRequest.fromToken);
       const destinationToken = resolveToken("thirdweb", swapRequest.toChainId, swapRequest.toToken);
+      const originTokenAddress = normalizeThirdwebTokenIdentifier(
+        originToken.identifier,
+        originToken.isNative
+      );
+      const destinationTokenAddress = normalizeThirdwebTokenIdentifier(
+        destinationToken.identifier,
+        destinationToken.isNative
+      );
+      const sender = normalizeThirdwebAddress(swapRequest.sender);
+      const receiver = normalizeThirdwebAddress(
+        swapRequest.receiver || swapRequest.sender
+      );
 
       const payload = {
-        originChainId: swapRequest.fromChainId,
-        originTokenAddress: originToken.identifier,
-        destinationChainId: swapRequest.toChainId,
-        destinationTokenAddress: destinationToken.identifier,
+        originChainId: swapRequest.fromChainId.toString(),
+        originTokenAddress,
+        destinationChainId: swapRequest.toChainId.toString(),
+        destinationTokenAddress,
         amount: swapRequest.amount.toString(),
-        sender: swapRequest.sender,
-        receiver: swapRequest.receiver || swapRequest.sender,
+        sellAmountWei: swapRequest.amount.toString(),
+        sender,
+        receiver,
       };
 
       console.log("[ThirdwebSwapAdapter] Prepare payload:", payload);

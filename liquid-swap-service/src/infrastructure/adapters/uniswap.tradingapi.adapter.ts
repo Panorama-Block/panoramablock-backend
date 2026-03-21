@@ -155,7 +155,7 @@ export class UniswapTradingApiAdapter implements ISwapProvider {
   public readonly name = 'uniswap-trading-api';
   private readonly client: AxiosInstance;
   private readonly config: UniswapTradingApiConfig;
-  private readonly slippageTolerance: string | number; // "auto" or fixed e.g. 5.0
+  private readonly slippageTolerance?: number;
   private readonly quoteCacheEnabled: boolean;
 
   // Quote cache to reuse between getQuote() and prepareSwap()
@@ -195,8 +195,12 @@ export class UniswapTradingApiAdapter implements ISwapProvider {
       console.warn('[UniswapTradingApiAdapter] ⚠️ No API key configured. Set UNISWAP_API_KEY env var.');
     }
 
-    this.slippageTolerance = process.env.UNISWAP_TRADING_API_SLIPPAGE || 'auto';
-    console.log(`[${this.name}] 📊 Slippage tolerance: ${this.slippageTolerance}`);
+    this.slippageTolerance = this.normalizeConfiguredSlippage(process.env.UNISWAP_TRADING_API_SLIPPAGE);
+    console.log(
+      `[${this.name}] 📊 Slippage tolerance: ${
+        this.slippageTolerance !== undefined ? this.slippageTolerance : 'provider-default'
+      }`
+    );
 
     // Quotes must not be cached by default (trust-first UX). Enable explicitly if needed.
     this.quoteCacheEnabled = String(process.env.ENABLE_QUOTE_CACHE || '').toLowerCase() === 'true';
@@ -282,6 +286,7 @@ export class UniswapTradingApiAdapter implements ISwapProvider {
       }
 
       // Build request payload
+      const slippageTolerance = this.resolveTradingApiSlippageTolerance();
       const payload = {
         tokenIn: this.normalizeTokenAddress(request.fromToken),
         tokenOut: this.normalizeTokenAddress(request.toToken),
@@ -290,15 +295,21 @@ export class UniswapTradingApiAdapter implements ISwapProvider {
         tokenInChainId: request.fromChainId,
         tokenOutChainId: request.toChainId,
         swapper: request.sender, // Required field
-        slippageTolerance: this.slippageTolerance, // "auto" or fixed value via UNISWAP_TRADING_API_SLIPPAGE
         enableUniversalRouter: true,
         simulateTransaction: false, // Disable simulation - let the wallet handle it
         // CRITICAL: Force Permit2 to be returned as on-chain transaction
         // instead of requiring off-chain signature (which we can't provide server-side)
         generatePermitAsTransaction: true,
       };
+      if (slippageTolerance !== undefined) {
+        (payload as Record<string, unknown>).slippageTolerance = slippageTolerance;
+      }
 
-      console.log(`[${this.name}] Using slippage tolerance: auto`);
+      console.log(
+        `[${this.name}] Using slippage tolerance: ${
+          slippageTolerance !== undefined ? slippageTolerance : 'provider-default'
+        }`
+      );
 
       // Call API with retry
       const response = await this.retryRequest<UniswapQuoteResponse>(
@@ -424,6 +435,7 @@ export class UniswapTradingApiAdapter implements ISwapProvider {
       console.log(`[${this.name}] Fetching fresh quote for prepare...`);
 
       // Build request payload
+      const slippageTolerance = this.resolveTradingApiSlippageTolerance();
       const payload = {
         tokenIn: this.normalizeTokenAddress(request.fromToken),
         tokenOut: this.normalizeTokenAddress(request.toToken),
@@ -433,14 +445,20 @@ export class UniswapTradingApiAdapter implements ISwapProvider {
         tokenOutChainId: request.toChainId,
         swapper: request.sender,
         recipient: request.receiver !== request.sender ? request.receiver : undefined,
-        slippageTolerance: this.slippageTolerance, // "auto" or fixed value via UNISWAP_TRADING_API_SLIPPAGE
         enableUniversalRouter: true,
         simulateTransaction: false, // Disable simulation - let the wallet handle it
         // CRITICAL: Force Permit2 to be returned as on-chain transaction
         generatePermitAsTransaction: true,
       };
+      if (slippageTolerance !== undefined) {
+        (payload as Record<string, unknown>).slippageTolerance = slippageTolerance;
+      }
 
-      console.log(`[${this.name}] Preparing swap with slippage tolerance: auto`);
+      console.log(
+        `[${this.name}] Preparing swap with slippage tolerance: ${
+          slippageTolerance !== undefined ? slippageTolerance : 'provider-default'
+        }`
+      );
 
       const quoteResponse = await this.retryRequest<UniswapQuoteResponse>(
         () => this.client.post('/quote', payload)
@@ -627,8 +645,22 @@ export class UniswapTradingApiAdapter implements ISwapProvider {
           quote: response.quote,
           route: response.route,
           gasFee: response.gasFee,
-          slippageTolerance: "auto",
+          slippageTolerance: this.resolveTradingApiSlippageTolerance() ?? "provider-default",
           minAmountOut: quoteMinAmount,
+          providerDebug: {
+            quoteId,
+            approvalRequestId: approvalCheck?.requestId,
+            swapRequestId: response?.requestId,
+            approvalSkipped: !approvalCheck?.approval && !approvalCheck?.cancel && !this.isNativeToken(request.fromToken),
+            needsApproval: Boolean(approvalCheck?.approval),
+            needsApprovalCancel: Boolean(approvalCheck?.cancel),
+            requestedSlippageTolerance: slippageTolerance ?? 'provider-default',
+            quoteSlippage: quoteResponse.quote?.slippage,
+            quoteOutputAmount: quoteResponse.quote?.output?.amount,
+            quoteMinAmount: quoteMinAmount,
+            hasPermitTransaction: Boolean(quoteResponse.permitTransaction),
+            hasPermitData: Boolean(quoteResponse.permitData),
+          },
         },
       };
 
@@ -819,6 +851,7 @@ export class UniswapTradingApiAdapter implements ISwapProvider {
       gasLimit: tx.gasLimit,
       maxFeePerGas: tx.maxFeePerGas,
       maxPriorityFeePerGas: tx.maxPriorityFeePerGas,
+      feeMode: 'advisory',
       description,
     };
   }
@@ -845,6 +878,28 @@ export class UniswapTradingApiAdapter implements ISwapProvider {
     }
 
     return address;
+  }
+
+  private resolveTradingApiSlippageTolerance(): number | undefined {
+    return this.slippageTolerance;
+  }
+
+  private normalizeConfiguredSlippage(rawValue?: string | number | null): number | undefined {
+    if (typeof rawValue === 'number') {
+      return Number.isFinite(rawValue) ? rawValue : undefined;
+    }
+
+    const normalized = String(rawValue || '')
+      .trim()
+      .replace(/^['"]|['"]$/g, '')
+      .toLowerCase();
+
+    if (!normalized || normalized === 'auto' || normalized === 'provider-default') {
+      return undefined;
+    }
+
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : undefined;
   }
 
   /**

@@ -78,12 +78,25 @@ export class ThirdwebProviderAdapter implements ISwapProvider {
 
     // Convert ThirdwebSwapAdapter response to PreparedSwap format
     const transactions: Transaction[] = [];
+    const seenTransactionKeys = new Set<string>();
+
+    const toTransactionKey = (tx: Transaction): string => JSON.stringify({
+      chainId: tx.chainId,
+      to: tx.to.toLowerCase(),
+      data: tx.data,
+      value: tx.value,
+      gasLimit: tx.gasLimit,
+      gasPrice: tx.gasPrice,
+      maxFeePerGas: tx.maxFeePerGas,
+      maxPriorityFeePerGas: tx.maxPriorityFeePerGas,
+      action: tx.action,
+    });
 
     const pushTx = (tx: any) => {
       if (!tx) {
         return;
       }
-      transactions.push({
+      const normalizedTx: Transaction = {
         chainId: tx.chainId,
         to: tx.to,
         data: tx.data || "0x",
@@ -103,9 +116,16 @@ export class ThirdwebProviderAdapter implements ISwapProvider {
           typeof tx.maxPriorityFeePerGas === "bigint"
             ? tx.maxPriorityFeePerGas.toString()
             : tx.maxPriorityFeePerGas,
+        feeMode: "advisory",
         action: tx.action,
         description: tx.description,
-      });
+      };
+      const key = toTransactionKey(normalizedTx);
+      if (seenTransactionKeys.has(key)) {
+        return;
+      }
+      seenTransactionKeys.add(key);
+      transactions.push(normalizedTx);
     };
 
     if (Array.isArray(prepared.transactions)) {
