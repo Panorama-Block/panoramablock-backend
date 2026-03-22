@@ -2,6 +2,7 @@ import { PanoramaV1Service } from '../../src/application/services/PanoramaV1Serv
 import { WalletBalanceReader } from '../../src/application/services/WalletBalanceReader';
 import { Wallet } from 'ethers';
 import { generateKeyPairSync, sign } from 'crypto';
+import { createBridgeRuntimeConfig } from '../../src/config/runtime';
 
 function createService() {
   const dbGateway: any = {
@@ -998,6 +999,28 @@ describe('PanoramaV1Service policy validation', () => {
       walletId: 'w1',
       txHashes: [{ hash: '0xabc', chainId: 8453 }],
     })).rejects.toMatchObject({ code: 'SWAP_PREPARED_EXPIRED', status: 409 });
+  });
+
+  it('uses the shared runtime config to resolve BSC reconciliation RPCs', () => {
+    const { dbGateway, adapter } = createService();
+    const runtimeConfig = createBridgeRuntimeConfig({
+      defaultEvmRpcUrl: 'https://default.example.com',
+      chainRpcUrls: {
+        56: 'https://bsc.example.com',
+      },
+    });
+    const service = new PanoramaV1Service(
+      dbGateway,
+      { prepareSwap: jest.fn() } as any,
+      { stake: jest.fn() } as any,
+      { getMarkets: jest.fn(), act: jest.fn() } as any,
+      { thirdweb: adapter, wdk: adapter } as any,
+      'wdk',
+      { readBalances: jest.fn() } as any,
+      runtimeConfig
+    );
+
+    expect((service as any).resolveRpcUrlForChain(56)).toBe('https://bsc.example.com');
   });
 
   it('rejects failPreparedSwap once the swap is no longer prepared', async () => {

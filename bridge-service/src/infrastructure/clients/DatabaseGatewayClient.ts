@@ -8,6 +8,7 @@ export class DatabaseGatewayClient {
   private readonly client: AxiosInstance | null;
 
   private readonly memory = {
+    users: new Map<string, PlainObject>(),
     wallets: new Map<string, PlainObject>(),
     policies: new Map<string, PlainObject>(),
     intents: new Map<string, PlainObject>(),
@@ -100,7 +101,7 @@ export class DatabaseGatewayClient {
     const nowIso = new Date().toISOString();
 
     if (!this.client) {
-      this.memory.events.set(`user:${userId}`, { userId, walletAddress, updatedAt: nowIso });
+      this.memory.users.set(userId, { userId, walletAddress, updatedAt: nowIso });
       return;
     }
 

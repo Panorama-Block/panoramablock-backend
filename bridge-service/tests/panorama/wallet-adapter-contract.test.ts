@@ -1,5 +1,6 @@
 import { ThirdwebWalletAdapter } from '../../src/infrastructure/adapters/ThirdwebWalletAdapter';
 import { WdkWalletAdapter } from '../../src/infrastructure/adapters/WdkWalletAdapter';
+import { createBridgeRuntimeConfig } from '../../src/config/runtime';
 
 describe('Wallet adapter conformance', () => {
   beforeEach(() => {
@@ -119,5 +120,26 @@ describe('Wallet adapter conformance', () => {
     expect(() => new WdkWalletAdapter({ supportedChains: ['evm'] })).toThrow(
       'WDK_EVM_RPC_URL is required when evm support is enabled'
     );
+  });
+
+  it('wdk adapter falls back to the shared runtime config while preserving per-chain override', () => {
+    process.env.WDK_RPC_56 = 'https://override.bsc.example.com';
+
+    const adapter = new WdkWalletAdapter({
+      supportedChains: ['evm'],
+      evmRpcUrl: 'https://rpc.example.com',
+      runtimeConfig: createBridgeRuntimeConfig({
+        defaultEvmRpcUrl: 'https://default.example.com',
+        chainRpcUrls: {
+          56: 'https://shared.bsc.example.com',
+          8453: 'https://shared.base.example.com',
+        },
+      }),
+    });
+
+    expect((adapter as any).resolveRpcUrl(56)).toBe('https://override.bsc.example.com');
+    expect((adapter as any).resolveRpcUrl(8453)).toBe('https://shared.base.example.com');
+
+    delete process.env.WDK_RPC_56;
   });
 });

@@ -15,6 +15,7 @@ import {
 } from '../../domain/ports/WalletProviderAdapterPort';
 import { randomUUID } from 'crypto';
 import { HDNodeWallet, JsonRpcProvider, TransactionRequest, Wallet } from 'ethers';
+import { BridgeRuntimeConfig, createBridgeRuntimeConfigFromEnv, resolveRpcUrl } from '../../config/runtime';
 
 type SupportedChain = 'evm' | 'ton';
 
@@ -25,6 +26,7 @@ type WdkWalletAdapterOptions = {
   seed?: string;
   requireSession?: boolean;
   simulateExecution?: boolean;
+  runtimeConfig?: BridgeRuntimeConfig;
 };
 
 type WdkSessionRecord = {
@@ -44,12 +46,14 @@ export class WdkWalletAdapter implements WalletProviderAdapterPort {
   private readonly simulateExecution: boolean;
   private readonly runtimeConfigured: boolean;
   private readonly chainConfig: Record<SupportedChain, { rpcUrl?: string }>;
+  private readonly runtimeConfig: BridgeRuntimeConfig;
 
   constructor(options: WdkWalletAdapterOptions = {}) {
     const supportedChains = options.supportedChains || this.parseSupportedChains(process.env.WDK_SUPPORTED_CHAINS || 'evm,ton');
     this.supportedChains = supportedChains;
     this.requireSession = options.requireSession ?? process.env.WDK_REQUIRE_SESSION !== 'false';
     this.simulateExecution = options.simulateExecution ?? process.env.WDK_SIMULATE_EXECUTION === 'true';
+    this.runtimeConfig = options.runtimeConfig || createBridgeRuntimeConfigFromEnv();
     this.chainConfig = {
       evm: { rpcUrl: options.evmRpcUrl || process.env.WDK_EVM_RPC_URL },
       ton: { rpcUrl: options.tonRpcUrl || process.env.WDK_TON_RPC_URL },
@@ -387,23 +391,7 @@ export class WdkWalletAdapter implements WalletProviderAdapterPort {
     if (byChainId) {
       return byChainId;
     }
-
-    switch (chainId) {
-      case 1:
-        return process.env.ETHEREUM_RPC_URL || process.env.RPC_URL || process.env.WDK_EVM_RPC_URL;
-      case 10:
-        return process.env.OPTIMISM_RPC_URL || process.env.WDK_EVM_RPC_URL;
-      case 56:
-        return process.env.BSC_RPC_URL || process.env.WDK_EVM_RPC_URL;
-      case 137:
-        return process.env.POLYGON_RPC_URL || process.env.WDK_EVM_RPC_URL;
-      case 8453:
-        return process.env.BASE_RPC_URL || process.env.WDK_EVM_RPC_URL;
-      case 42161:
-        return process.env.ARBITRUM_RPC_URL || process.env.WDK_EVM_RPC_URL;
-      default:
-        return process.env.WDK_EVM_RPC_URL;
-    }
+    return resolveRpcUrl(chainId, this.runtimeConfig) || this.chainConfig.evm.rpcUrl;
   }
 
   private normalizeTransaction(transaction: Record<string, unknown>): TransactionRequest {

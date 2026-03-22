@@ -7,6 +7,7 @@ import { LendingClient, LendingActionRequest } from '../../infrastructure/client
 import { DatabaseGatewayClient, PlainObject } from '../../infrastructure/clients/DatabaseGatewayClient';
 import { WalletExecutionStrategy, WalletProviderAdapterPort } from '../../domain/ports/WalletProviderAdapterPort';
 import { WalletBalanceReader } from './WalletBalanceReader';
+import { BridgeRuntimeConfig, createBridgeRuntimeConfigFromEnv, resolveRpcUrl } from '../../config/runtime';
 
 export type WalletProvider = 'thirdweb' | 'wdk';
 
@@ -209,7 +210,8 @@ export class PanoramaV1Service {
     private readonly lendingClient: LendingClient,
     private readonly adapters: Record<WalletProvider, WalletProviderAdapterPort>,
     private readonly defaultWalletProvider: WalletProvider = 'wdk',
-    private readonly walletBalanceReader: WalletBalanceReader = new WalletBalanceReader()
+    private readonly walletBalanceReader: WalletBalanceReader = new WalletBalanceReader(),
+    private readonly runtimeConfig: BridgeRuntimeConfig = createBridgeRuntimeConfigFromEnv()
   ) {}
 
   private resolveAdapter(provider: WalletProvider): WalletProviderAdapterPort {
@@ -2031,8 +2033,7 @@ export class PanoramaV1Service {
   }
 
   private getMissingSubmissionGracePeriodMs(): number {
-    const configured = Number(process.env.PANORAMA_SWAP_SUBMISSION_RECONCILIATION_MS || 120000);
-    return Number.isFinite(configured) && configured > 0 ? configured : 120000;
+    return this.runtimeConfig.swapSubmissionReconciliationMs;
   }
 
   private createChainProvider(chainId: number): JsonRpcProvider | null {
@@ -2041,20 +2042,7 @@ export class PanoramaV1Service {
   }
 
   private resolveRpcUrlForChain(chainId: number): string | undefined {
-    switch (chainId) {
-      case 1:
-        return process.env.ETHEREUM_RPC_URL || process.env.RPC_URL || process.env.WDK_EVM_RPC_URL;
-      case 8453:
-        return process.env.BASE_RPC_URL || process.env.WDK_EVM_RPC_URL;
-      case 42161:
-        return process.env.ARBITRUM_RPC_URL || process.env.WDK_EVM_RPC_URL;
-      case 10:
-        return process.env.OPTIMISM_RPC_URL || process.env.WDK_EVM_RPC_URL;
-      case 137:
-        return process.env.POLYGON_RPC_URL || process.env.WDK_EVM_RPC_URL;
-      default:
-        return process.env.WDK_EVM_RPC_URL;
-    }
+    return resolveRpcUrl(chainId, this.runtimeConfig);
   }
 
   private encryptMnemonicExport(

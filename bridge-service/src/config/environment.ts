@@ -92,6 +92,18 @@ const EnvironmentSchema = z.object({
   WDK_SEED: z.string().optional(),
   WDK_REQUIRE_SESSION: z.string().transform(v => v !== 'false').default('true'),
   WDK_SIMULATE_EXECUTION: z.string().transform(v => v === 'true').default('false'),
+  TOKEN_REGISTRY_PATH: z.string().optional(),
+  ETHEREUM_RPC_URL: z.string().url().optional(),
+  OPTIMISM_RPC_URL: z.string().url().optional(),
+  BSC_RPC_URL: z.string().url().optional(),
+  POLYGON_RPC_URL: z.string().url().optional(),
+  BASE_RPC_URL: z.string().url().optional(),
+  ARBITRUM_RPC_URL: z.string().url().optional(),
+  RPC_URL: z.string().url().optional(),
+  PANORAMA_SWAP_SUBMISSION_RECONCILIATION_MS: z.preprocess(
+    (v) => (typeof v === 'string' ? parseInt(v, 10) : v),
+    z.number().optional()
+  ),
   THIRDWEB_ENGINE_URL: z.string().url().optional(),
   ENGINE_ACCESS_TOKEN: z.string().optional(),
   WEBHOOK_DELIVERY_TIMEOUT_MS: z.preprocess(

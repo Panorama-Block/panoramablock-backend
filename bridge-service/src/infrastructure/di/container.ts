@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { validateEnvironment, EnvironmentConfig } from '../../config/environment';
+import { createBridgeRuntimeConfig } from '../../config/runtime';
 
 // Domain Ports
 import { BridgeProviderPort } from '../../domain/ports/BridgeProviderPort';
@@ -60,6 +61,19 @@ export async function createDIContainer(): Promise<DIContainer> {
   await database.$connect();
 
   const layerswapAdapter = new LayerswapAdapter();
+  const runtimeConfig = createBridgeRuntimeConfig({
+    tokenRegistryPath: process.env.TOKEN_REGISTRY_PATH,
+    swapSubmissionReconciliationMs: Number(process.env.PANORAMA_SWAP_SUBMISSION_RECONCILIATION_MS || 120000),
+    defaultEvmRpcUrl: config.WDK_EVM_RPC_URL,
+    chainRpcUrls: {
+      1: process.env.ETHEREUM_RPC_URL || process.env.RPC_URL || config.WDK_EVM_RPC_URL,
+      10: process.env.OPTIMISM_RPC_URL || config.WDK_EVM_RPC_URL,
+      56: process.env.BSC_RPC_URL || config.WDK_EVM_RPC_URL,
+      137: process.env.POLYGON_RPC_URL || config.WDK_EVM_RPC_URL,
+      8453: process.env.BASE_RPC_URL || config.WDK_EVM_RPC_URL,
+      42161: process.env.ARBITRUM_RPC_URL || config.WDK_EVM_RPC_URL,
+    },
+  });
   const databaseGatewayClient = new DatabaseGatewayClient();
   const liquidSwapClient = new LiquidSwapClient(
     config.LIQUID_SWAP_SERVICE_URL || 'http://localhost:3002',
@@ -80,6 +94,7 @@ export async function createDIContainer(): Promise<DIContainer> {
       seed: config.WDK_SEED,
       requireSession: config.WDK_REQUIRE_SESSION,
       simulateExecution: config.WDK_SIMULATE_EXECUTION,
+      runtimeConfig,
     });
   } catch (error) {
     wdkAdapter = {
@@ -118,10 +133,11 @@ export async function createDIContainer(): Promise<DIContainer> {
   const getBridgeQuote = new GetBridgeQuoteUseCase(layerswapAdapter);
   const getBridgeStatus = new GetBridgeStatusUseCase(layerswapAdapter);
   const bridgeController = new BridgeController(createBridgeTransaction, getBridgeQuote, getBridgeStatus);
+  const walletBalanceReader = new WalletBalanceReader(runtimeConfig);
   const panoramaV1Service = new PanoramaV1Service(databaseGatewayClient, liquidSwapClient, lidoClient, lendingClient, {
     thirdweb: thirdwebAdapter,
     wdk: wdkAdapter,
-  }, config.WALLET_PROVIDER_DEFAULT, new WalletBalanceReader());
+  }, config.WALLET_PROVIDER_DEFAULT, walletBalanceReader, runtimeConfig);
   const panoramaV1Controller = new PanoramaV1Controller(panoramaV1Service, config.WALLET_PROVIDER_DEFAULT);
 
   return {

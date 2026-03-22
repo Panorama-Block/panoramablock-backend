@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Contract, JsonRpcProvider, formatUnits, getAddress } from 'ethers';
+import { BridgeRuntimeConfig, createBridgeRuntimeConfigFromEnv, resolveRpcUrl } from '../../config/runtime';
 
 type TokenMetadata = {
   address: string;
@@ -72,9 +73,9 @@ type TokenReadFailure = {
   message: string;
 };
 
-function loadTokenRegistry(): RegistryData {
+function loadTokenRegistry(config: BridgeRuntimeConfig): RegistryData {
   const candidatePaths = [
-    process.env.TOKEN_REGISTRY_PATH,
+    config.tokenRegistryPath,
     path.resolve(process.cwd(), 'shared/token-registry.json'),
     path.resolve(process.cwd(), '../shared/token-registry.json'),
     path.resolve(process.cwd(), 'panorama-block-backend/shared/token-registry.json'),
@@ -90,9 +91,6 @@ function loadTokenRegistry(): RegistryData {
 
   throw new Error(`Token registry file not found. Checked paths: ${candidatePaths.join(', ')}`);
 }
-
-const tokenRegistry = loadTokenRegistry();
-
 export function resolveWalletChainIds(walletChain: string, allowedChains?: number[]): number[] {
   if (Array.isArray(allowedChains) && allowedChains.length > 0) {
     return Array.from(new Set(allowedChains.map((value) => Number(value)).filter(Number.isFinite)));
@@ -123,30 +121,17 @@ export function resolveWalletChainIds(walletChain: string, allowedChains?: numbe
   }
 }
 
-export function resolveEvmRpcUrl(chainId: number): string | undefined {
-  switch (chainId) {
-    case 1:
-      return process.env.ETHEREUM_RPC_URL || process.env.RPC_URL || process.env.WDK_EVM_RPC_URL;
-    case 10:
-      return process.env.OPTIMISM_RPC_URL || process.env.WDK_EVM_RPC_URL;
-    case 56:
-      return process.env.BSC_RPC_URL || process.env.WDK_EVM_RPC_URL;
-    case 137:
-      return process.env.POLYGON_RPC_URL || process.env.WDK_EVM_RPC_URL;
-    case 8453:
-      return process.env.BASE_RPC_URL || process.env.WDK_EVM_RPC_URL;
-    case 42161:
-      return process.env.ARBITRUM_RPC_URL || process.env.WDK_EVM_RPC_URL;
-    default:
-      return process.env.RPC_URL || process.env.WDK_EVM_RPC_URL;
-  }
-}
-
 function normalizeAddress(address: string): string {
   return getAddress(address.toLowerCase());
 }
 
 export class WalletBalanceReader {
+  private readonly tokenRegistry: RegistryData;
+
+  constructor(private readonly runtimeConfig: BridgeRuntimeConfig = createBridgeRuntimeConfigFromEnv()) {
+    this.tokenRegistry = loadTokenRegistry(runtimeConfig);
+  }
+
   async readBalances(input: {
     walletId: string;
     userId: string;
@@ -201,9 +186,9 @@ export class WalletBalanceReader {
     walletAddress: string,
     includeZeroBalances: boolean
   ): Promise<BalanceChainSnapshot> {
-    const chain = tokenRegistry.chains[String(chainId)];
+    const chain = this.tokenRegistry.chains[String(chainId)];
     const fetchedAt = new Date().toISOString();
-    const rpcUrl = resolveEvmRpcUrl(chainId);
+    const rpcUrl = resolveRpcUrl(chainId, this.runtimeConfig);
 
     if (!chain) {
       return {
