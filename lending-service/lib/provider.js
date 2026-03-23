@@ -49,17 +49,11 @@ function createAvalancheProvider(options = {}) {
     return _cachedProvider;
   }
 
-  const network = ethers.Network.from(43114);
+  const networkConfig = { name: 'avalanche', chainId: 43114 };
+  const providerOpts = { staticNetwork: true, batchMaxCount, batchStallTime };
 
   if (avalancheRpcUrls.length === 1) {
-    const provider = new ethers.JsonRpcProvider(avalancheRpcUrls[0], {
-      name: 'avalanche',
-      chainId: 43114
-    }, {
-      staticNetwork: true,
-      batchMaxCount,
-      batchStallTime,
-    });
+    const provider = new ethers.JsonRpcProvider(avalancheRpcUrls[0], networkConfig, providerOpts);
 
     if (batchMaxCount === 1 && batchStallTime === 10) {
       _cachedProvider = provider;
@@ -68,26 +62,16 @@ function createAvalancheProvider(options = {}) {
   }
 
   // Multiple RPCs: FallbackProvider
-  const rpcProviders = avalancheRpcUrls.map((url, index) => {
-    const provider = new ethers.JsonRpcProvider(url, {
-      name: 'avalanche',
-      chainId: 43114,
-    }, {
-      staticNetwork: true,
-      batchMaxCount,
-      batchStallTime,
-    });
-    return {
-      provider,
-      priority: index + 1,
-      stallTimeout: 2000,
-      weight: 1,
-    };
-  });
+  const rpcProviders = avalancheRpcUrls.map((url, index) => ({
+    provider: new ethers.JsonRpcProvider(url, networkConfig, providerOpts),
+    priority: index + 1,
+    stallTimeout: 2000,
+    weight: 1,
+  }));
 
   console.log(`[Provider] Avalanche: ${avalancheRpcUrls.length} RPC endpoints configured (fallback enabled)`);
 
-  const fallback = new ethers.FallbackProvider(rpcProviders, network);
+  const fallback = new ethers.FallbackProvider(rpcProviders, 43114);
 
   if (batchMaxCount === 1 && batchStallTime === 10) {
     _cachedProvider = fallback;
