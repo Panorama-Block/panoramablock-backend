@@ -73,11 +73,22 @@ jobs:
             --username ${{ secrets.GHCR_USERNAME }} \
             --password ${{ secrets.GHCR_PASSWORD }}
 
+      - name: Resolve execution-service FQDN
+        id: exec_fqdn
+        run: |
+          FQDN=$(az containerapp show \
+            --name execution-service \
+            --resource-group $RG \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "url=https://${FQDN}" >> "$GITHUB_OUTPUT"
+
       - name: Deploy liquid-swap
         env:
           IMAGE: ${{ steps.image.outputs.image }}
+          EXEC_URL: ${{ steps.exec_fqdn.outputs.url }}
         run: |
           az containerapp update \
             --name liquid-swap \
             --resource-group $RG \
-            --image "$IMAGE"
+            --image "$IMAGE" \
+            --set-env-vars EXECUTION_LAYER_URL="$EXEC_URL"
