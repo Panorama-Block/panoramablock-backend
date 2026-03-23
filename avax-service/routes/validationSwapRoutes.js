@@ -7,6 +7,7 @@ const {
   sanitizeInput
 } = require('../middleware/auth');
 const { NETWORKS, VALIDATION } = require('../config/constants');
+const { createAvalancheProvider } = require('../lib/provider');
 
 const router = express.Router();
 
@@ -86,13 +87,7 @@ router.post('/validateAndSwap',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const validationService = new ValidationService(provider);
       
@@ -217,13 +212,7 @@ router.post('/getValidationAndSwapQuote',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const validationService = new ValidationService(provider);
       

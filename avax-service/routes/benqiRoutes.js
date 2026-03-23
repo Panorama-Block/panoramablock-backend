@@ -8,6 +8,7 @@ const {
   sanitizeInput
 } = require('../middleware/auth');
 const { NETWORKS, BENQI } = require('../config/constants');
+const { createAvalancheProvider } = require('../lib/provider');
 
 const router = express.Router();
 
@@ -80,13 +81,7 @@ router.get('/qtokens/:address',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const benqiService = new BenqiService(provider);
       const qTokenInfo = await benqiService.getQTokenInfo(address);
@@ -134,13 +129,7 @@ router.get('/qtokens/:address/rates',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const benqiService = new BenqiService(provider);
       const rates = await benqiService.getInterestRates(address);
@@ -188,13 +177,7 @@ router.get('/account/:address/liquidity',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const benqiService = new BenqiService(provider);
       const liquidity = await benqiService.getAccountLiquidity(address);
@@ -242,13 +225,7 @@ router.get('/account/:address/assets',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const benqiService = new BenqiService(provider);
       const assets = await benqiService.getAssetsIn(address);
@@ -297,13 +274,7 @@ router.get('/account/:address/balance/:qTokenAddress',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const benqiService = new BenqiService(provider);
       const balance = await benqiService.getQTokenBalance(qTokenAddress, address);
@@ -352,13 +323,7 @@ router.get('/account/:address/borrow/:qTokenAddress',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const benqiService = new BenqiService(provider);
       const borrowBalance = await benqiService.getBorrowBalance(qTokenAddress, address);
@@ -406,13 +371,7 @@ router.get('/account/:address/info',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const benqiService = new BenqiService(provider);
       const accountInfo = await benqiService.getAccountInfo(address);
@@ -472,13 +431,7 @@ router.post('/supply',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const benqiService = new BenqiService(provider, req.verifiedAddress);
       const transactionData = await benqiService.prepareSupply(qTokenAddress, amount);
@@ -538,13 +491,7 @@ router.post('/redeem',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const benqiService = new BenqiService(provider, req.verifiedAddress);
       const transactionData = await benqiService.prepareRedeem(qTokenAddress, amount, isUnderlying || false);
@@ -604,13 +551,7 @@ router.post('/borrow',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const benqiService = new BenqiService(provider, req.verifiedAddress);
       const transactionData = await benqiService.prepareBorrow(qTokenAddress, amount);
@@ -670,13 +611,7 @@ router.post('/repay',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const benqiService = new BenqiService(provider, req.verifiedAddress);
       const transactionData = await benqiService.prepareRepay(qTokenAddress, amount);
@@ -739,13 +674,7 @@ router.post('/enterMarkets',
         }
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const benqiService = new BenqiService(provider, req.verifiedAddress);
       const transactionData = await benqiService.prepareEnterMarkets(qTokenAddresses);
@@ -805,13 +734,7 @@ router.post('/exitMarket',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const benqiService = new BenqiService(provider, req.verifiedAddress);
       const transactionData = await benqiService.prepareExitMarket(qTokenAddress);

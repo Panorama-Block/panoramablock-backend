@@ -9,6 +9,7 @@ const {
   prepareTransactionData
 } = require('../middleware/auth');
 const { NETWORKS, VALIDATION } = require('../config/constants');
+const { createAvalancheProvider } = require('../lib/provider');
 
 const router = express.Router();
 
@@ -49,13 +50,7 @@ router.get('/info',
   validationRateLimiter,
   async (req, res) => {
     try {
-      const rpcUrl = req.body.rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: req.body.rpc });
 
       const validationService = new ValidationService(provider);
       const contractInfo = await validationService.getContractInfo();
@@ -142,13 +137,7 @@ router.post('/calculate',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const validationService = new ValidationService(provider);
       
@@ -266,13 +255,7 @@ router.post('/setTaxRate',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const validationService = new ValidationService(provider);
       
@@ -394,13 +377,7 @@ router.post('/payAndValidate',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const validationService = new ValidationService(provider);
       
@@ -496,13 +473,7 @@ router.post('/withdraw',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const validationService = new ValidationService(provider);
       
@@ -578,13 +549,7 @@ router.get('/balance',
     try {
       const { rpc } = req.body;
       
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const validationService = new ValidationService(provider);
       const balance = await validationService.getContractBalance();
@@ -689,13 +654,7 @@ router.post('/prepare',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const validationService = new ValidationService(provider);
       const transactionData = await validationService.prepareTransaction(functionName, params || []);

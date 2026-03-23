@@ -300,9 +300,8 @@ const SAVAX_ABI = [
 
 /** Lightweight on-chain fallback for liquid-staking position when execution layer is down. */
 async function getPositionFallback(userAddress) {
-  const { ethers } = require('ethers');
-  const rpcUrl = process.env.AVALANCHE_RPC_URL || process.env.RPC_URL_AVALANCHE || 'https://api.avax.network/ext/bc/C/rpc';
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const { createAvalancheProvider } = require('../lib/provider');
+  const provider = createAvalancheProvider();
   const sAvax = new ethers.Contract(SAVAX_ADDRESS, SAVAX_ABI, provider);
 
   const balance = await sAvax.balanceOf(userAddress);
