@@ -5,6 +5,7 @@ import { ErrorHandler } from './infrastructure/http/middleware/errorHandler';
 import { DatabaseService } from './infrastructure/database/database.service';
 import { EthereumConfig } from './infrastructure/config/ethereum';
 import { ERROR_CODES, sendError } from './shared/errorCodes';
+import { serializeByUser } from './middleware/serialize-by-user';
 
 export function createApp(): express.Express {
   const app = express();
@@ -54,6 +55,8 @@ export function createApp(): express.Express {
 
     next();
   });
+
+  app.use(serializeByUser);
 
   app.use('/api/lido', LidoRoutes);
 

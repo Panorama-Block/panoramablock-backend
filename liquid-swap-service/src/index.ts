@@ -81,6 +81,10 @@ try {
   app.use(expressLib.urlencoded({ extended: true, limit: "10mb" }));
   app.use(requestContextMiddleware);
 
+  // Per-user request serialization — prevents RPC burst from same wallet
+  const { serializeByUser } = require("./middleware/serialize-by-user");
+  app.use(serializeByUser);
+
   // Request logging (opcional via DEBUG)
   app.use((req: Request, _res: Response, next: NextFunction) => {
     if (process.env.DEBUG === "true") {

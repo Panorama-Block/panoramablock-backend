@@ -27,6 +27,7 @@ export const ERROR_CODES = {
 
   // Network
   RPC_ERROR: 'RPC_ERROR',
+  RPC_UNAVAILABLE: 'RPC_UNAVAILABLE',
   NETWORK_ERROR: 'NETWORK_ERROR',
   SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
   TIMEOUT: 'TIMEOUT',
@@ -55,4 +56,37 @@ export function sendError(
     (body.error as Record<string, unknown>).details = details;
   }
   res.status(status).json(body);
+}
+
+const RPC_ERROR_PATTERNS = [
+  /timeout/i,
+  /ECONNREFUSED/i,
+  /ENOTFOUND/i,
+  /missing response/i,
+  /could not detect network/i,
+  /bad response/i,
+  /server error/i,
+  /rate.?limit/i,
+  /too many requests/i,
+  /circuit breaker/i,
+  /NETWORK_ERROR/i,
+  /SERVER_ERROR/i,
+  /TIMEOUT/i,
+];
+
+export function isRpcError(err: Error): boolean {
+  const msg = err.message || '';
+  return RPC_ERROR_PATTERNS.some((pattern) => pattern.test(msg));
+}
+
+export function sendRpcUnavailable(res: Response, err: Error): void {
+  console.error('[RPC_UNAVAILABLE]', err.message?.slice(0, 200));
+  res.status(503).set({ 'Retry-After': '5' }).json({
+    success: false,
+    error: {
+      code: ERROR_CODES.RPC_UNAVAILABLE,
+      message: 'Blockchain node temporarily unavailable. Please retry.',
+      retryAfter: 5,
+    },
+  });
 }

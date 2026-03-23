@@ -78,7 +78,7 @@ export class RpcCircuitBreaker {
 
 export class EthereumConfig {
   private static instance: EthereumConfig;
-  private provider!: ethers.providers.JsonRpcProvider;
+  private provider!: ethers.providers.BaseProvider;
   private logger: Logger;
   private _circuitBreaker: RpcCircuitBreaker;
 
@@ -101,15 +101,25 @@ export class EthereumConfig {
 
   private initializeProvider(): void {
     try {
-      const rpcUrl = process.env.ETHEREUM_RPC_URL;
-      if (!rpcUrl) {
-        throw new Error('ETHEREUM_RPC_URL environment variable is required');
+      const rpcUrls = this.parseRpcUrls();
+      if (rpcUrls.length === 0) {
+        throw new Error('ETHEREUM_RPC_URL or ETHEREUM_RPC_URLS environment variable is required');
       }
 
-      this.provider = new ethers.providers.JsonRpcProvider(rpcUrl, {
-        name: 'mainnet',
-        chainId: 1
-      });
+      const network = { name: 'mainnet', chainId: 1 };
+
+      if (rpcUrls.length === 1) {
+        this.provider = new ethers.providers.JsonRpcProvider(rpcUrls[0], network);
+      } else {
+        const rpcProviders = rpcUrls.map((url, index) => ({
+          provider: new ethers.providers.StaticJsonRpcProvider(url, network),
+          priority: index + 1,
+          stallTimeout: 2000,
+          weight: 1,
+        }));
+        this.provider = new ethers.providers.FallbackProvider(rpcProviders, 1);
+        this.logger.info(`Ethereum FallbackProvider: ${rpcUrls.length} endpoints configured`);
+      }
 
       this.logger.info('Ethereum provider initialized successfully');
     } catch (error) {
@@ -118,7 +128,17 @@ export class EthereumConfig {
     }
   }
 
-  public getProvider(): ethers.providers.JsonRpcProvider {
+  private parseRpcUrls(): string[] {
+    const listEnv = process.env.ETHEREUM_RPC_URLS;
+    if (listEnv) {
+      const urls = listEnv.split(',').map(u => u.trim()).filter(Boolean);
+      if (urls.length > 0) return urls;
+    }
+    const singleUrl = process.env.ETHEREUM_RPC_URL;
+    return singleUrl ? [singleUrl] : [];
+  }
+
+  public getProvider(): ethers.providers.BaseProvider {
     return this.provider;
   }
 
