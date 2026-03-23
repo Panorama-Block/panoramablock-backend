@@ -17,8 +17,8 @@ const router = express.Router();
 const benqiRateLimiter = createRateLimiter(100, 15 * 60 * 1000); // 100 requests por 15 minutos
 
 // --- Performance guardrails (trust-first: cache is short-lived; on-chain remains source of truth) ---
-const BENQI_MARKETS_CACHE_TTL_MS = Number(process.env.BENQI_MARKETS_CACHE_TTL_MS || 60_000);
-const BENQI_QTOKENS_CACHE_TTL_MS = Number(process.env.BENQI_QTOKENS_CACHE_TTL_MS || 120_000);
+const BENQI_MARKETS_CACHE_TTL_MS = Number(process.env.BENQI_MARKETS_CACHE_TTL_MS || 300_000); // 5min — APR/TVL data changes slowly
+const BENQI_QTOKENS_CACHE_TTL_MS = Number(process.env.BENQI_QTOKENS_CACHE_TTL_MS || 300_000); // 5min — qToken list is near-static
 const BENQI_POSITIONS_CACHE_TTL_MS = Math.max(5_000, Number(process.env.BENQI_POSITIONS_CACHE_TTL_MS || 20_000));
 // Slightly higher concurrency reduces tail-latency for /benqi/markets without spamming the RPC.
 const BENQI_MARKETS_CONCURRENCY = Math.max(1, Number(process.env.BENQI_MARKETS_CONCURRENCY || 6));
@@ -106,13 +106,11 @@ function prunePositionsCache() {
   }
 }
 
+const { createAvalancheProvider: createAvalancheProviderBase } = require('../lib/provider');
+
 function createAvalancheProvider(rpcUrlOverride) {
-  const rpcUrl = rpcUrlOverride || NETWORKS.AVALANCHE.rpcUrl;
-  return new ethers.JsonRpcProvider(rpcUrl, {
-    name: 'avalanche',
-    chainId: 43114
-  }, {
-    staticNetwork: true,
+  return createAvalancheProviderBase({
+    rpcUrlOverride,
     batchMaxCount: BENQI_RPC_BATCH_MAX_COUNT,
     batchStallTime: BENQI_RPC_BATCH_STALL_TIME_MS,
   });

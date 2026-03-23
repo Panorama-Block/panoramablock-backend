@@ -1,14 +1,9 @@
 const express = require('express');
 const request = require('supertest');
+const { ethers } = require('ethers');
 
-const mockJsonRpcProvider = jest.fn();
-const mockIsAddress = jest.fn((value) => typeof value === 'string' && /^0x[a-fA-F0-9]{40}$/.test(value));
-
-jest.mock('ethers', () => ({
-  ethers: {
-    JsonRpcProvider: jest.fn((...args) => mockJsonRpcProvider(...args)),
-    isAddress: jest.fn((...args) => mockIsAddress(...args)),
-  },
+jest.mock('../../../lib/provider', () => ({
+  createAvalancheProvider: jest.fn(() => ({ kind: 'provider' })),
 }));
 
 jest.mock('../../../middleware/auth', () => ({
@@ -72,7 +67,6 @@ describe('benqiValidationRoutes fallback mode', () => {
     ValidationService.mockImplementation(() => ({
       preparePayAndValidate: jest.fn(),
     }));
-    mockJsonRpcProvider.mockImplementation(() => ({ kind: 'provider' }));
 
     app = buildApp();
   });

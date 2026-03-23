@@ -8,6 +8,7 @@ const {
   sanitizeInput
 } = require('../middleware/auth');
 const { NETWORKS, TRADER_JOE, listTokens, getTokenAddress, addToken } = require('../config/constants');
+const { createAvalancheProvider } = require('../lib/provider');
 
 const router = express.Router();
 
@@ -82,13 +83,7 @@ router.get('/getprice',
       }
 
       // Usa RPC fornecido ou padrão
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
       
       // Usa o endereço verificado pela assinatura
       const traderJoeService = new TraderJoeService(provider, req.verifiedAddress);
@@ -174,13 +169,7 @@ router.post('/getprice',
       }
 
       // Usa RPC fornecido ou padrão
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       // Usa o endereço verificado pela assinatura
       const traderJoeService = new TraderJoeService(provider, req.verifiedAddress);
@@ -273,13 +262,7 @@ router.get('/getuserliquidity',
       }
 
       // Usa RPC fornecido ou padrão
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
       
       // Usa o endereço verificado pela assinatura
       const traderJoeService = new TraderJoeService(provider, req.verifiedAddress);
@@ -361,13 +344,7 @@ router.get('/getpoolliquidity',
       }
 
       // Usa RPC fornecido ou padrão
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
       // Usa o endereço verificado pela assinatura
       const traderJoeService = new TraderJoeService(provider, req.verifiedAddress);
 
@@ -446,13 +423,7 @@ router.get('/gettokenliquidity',
       }
 
       // Usa RPC fornecido ou padrão
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
       // Usa o endereço verificado pela assinatura
       const traderJoeService = new TraderJoeService(provider, req.verifiedAddress);
 
@@ -574,13 +545,7 @@ router.post('/swap',
       }
 
       // Usa RPC fornecido ou padrão
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
       // Usa o endereço verificado pela assinatura
       const traderJoeService = new TraderJoeService(provider, req.verifiedAddress);
 
@@ -726,13 +691,7 @@ router.post('/addliquidity',
       }
 
       // Usa RPC fornecido ou padrão
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
       // Usa o endereço verificado pela assinatura
       const traderJoeService = new TraderJoeService(provider, req.verifiedAddress);
 
@@ -882,13 +841,7 @@ router.post('/removeliquidity',
       }
 
       // Usa RPC fornecido ou padrão
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
       // Usa o endereço verificado pela assinatura
       const traderJoeService = new TraderJoeService(provider, req.verifiedAddress);
 

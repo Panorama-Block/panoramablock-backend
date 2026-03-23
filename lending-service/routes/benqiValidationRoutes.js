@@ -9,6 +9,7 @@ const {
   prepareTransactionData
 } = require('../middleware/auth');
 const { NETWORKS, VALIDATION } = require('../config/constants');
+const { createAvalancheProvider } = require('../lib/provider');
 
 const router = express.Router();
 
@@ -107,13 +108,7 @@ router.post('/validateAndSupply',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const benqiService = new BenqiService(provider);
       const validationConfigured = isValidationContractConfigured();
@@ -236,13 +231,7 @@ router.post('/validateAndBorrow',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const benqiService = new BenqiService(provider);
       const validationConfigured = isValidationContractConfigured();
@@ -368,13 +357,7 @@ router.post('/getValidationAndSupplyQuote',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const validationService = new ValidationService(provider);
       
@@ -481,13 +464,7 @@ router.post('/getValidationAndBorrowQuote',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const validationService = new ValidationService(provider);
       
@@ -591,13 +568,7 @@ router.post('/validateAndWithdraw',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const benqiService = new BenqiService(provider);
       const validationConfigured = isValidationContractConfigured();
@@ -720,13 +691,7 @@ router.post('/validateAndRepay',
         });
       }
 
-      const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = new ethers.JsonRpcProvider(rpcUrl, {
-        name: 'avalanche',
-        chainId: 43114
-      }, {
-        staticNetwork: true
-      });
+      const provider = createAvalancheProvider({ rpcUrlOverride: rpc });
 
       const benqiService = new BenqiService(provider);
       const validationConfigured = isValidationContractConfigured();

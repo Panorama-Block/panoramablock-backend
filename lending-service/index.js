@@ -88,6 +88,10 @@ const globalRateLimiter = rateLimit({
 
 app.use(globalRateLimiter);
 
+// Per-user request serialization — prevents RPC burst from same wallet
+const { serializeByUser } = require('./middleware/serializeByUser');
+app.use(serializeByUser);
+
 // Middleware de validação de rede
 app.use((req, res, next) => {
   // Adiciona informações da rede ao request
@@ -167,8 +171,8 @@ app.get('/info', (req, res) => {
 // Rota de status da rede
 app.get('/network/status', async (req, res) => {
   try {
-    const { ethers } = require('ethers');
-    const provider = new ethers.JsonRpcProvider(NETWORKS.AVALANCHE.rpcUrl);
+    const { createAvalancheProvider } = require('./lib/provider');
+    const provider = createAvalancheProvider();
     
     const [blockNumber, gasPrice, network] = await Promise.all([
       provider.getBlockNumber(),
