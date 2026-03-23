@@ -5,7 +5,7 @@ WORKDIR /app
 # Native deps (thirdweb/metamask deps include native modules like bufferutil)
 RUN apk add --no-cache python3 py3-setuptools make g++
 
-# Copy package files (sem lockfile para evitar conflitos de integridade no CI)
+# Copy package files
 COPY package.json ./package.json
 RUN npm install --legacy-peer-deps --force
 

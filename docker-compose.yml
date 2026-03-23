@@ -165,12 +165,17 @@ services:
       - ENGINE_URL=http://engine:3005
       - ENGINE_ENABLED=${ENGINE_ENABLED}
       - TOKEN_REGISTRY_PATH=/app/shared/token-registry.json
+      # Execution Layer (Aerodrome/TraderJoe smart contracts)
+      - EXECUTION_LAYER_URL=http://execution_service:3010
+      - EXECUTION_SERVICE_URL=http://execution_service:3010
     env_file:
       - .env
     depends_on:
       auth_service:
         condition: service_started
       engine:
+        condition: service_started
+      execution_service:
         condition: service_started
     restart: always
     volumes:
@@ -227,6 +232,7 @@ services:
       - AVALANCHE_RPC_URL=${AVALANCHE_RPC_URL}
       - RPC_URL=${RPC_URL}
       - VALIDATION_CONTRACT_ADDRESS=${VALIDATION_CONTRACT_ADDRESS:-0x8513be0BD39c8B7d693A678ae2350Ffaa284E3cf}
+      - EXECUTION_LAYER_URL=http://execution_service:3010
       # Engine configuration (for ERC-4337 execution)
       - ENGINE_URL=http://engine:3005
       - ENGINE_ENABLED=${ENGINE_ENABLED}
@@ -238,6 +244,8 @@ services:
       auth_service:
         condition: service_started
       engine:
+        condition: service_started
+      execution_service:
         condition: service_started
     restart: always
 
@@ -314,8 +322,11 @@ services:
       - NODE_ENV=${NODE_ENV}
       - DEBUG=${DEBUG}
       - BASE_RPC_URL=${BASE_RPC_URL}
-      - EXECUTOR_ADDRESS=${EXECUTOR_ADDRESS:-0x79D671250f75631ca199d0Fa22b0071052214172}
-      - AERODROME_ADAPTER_ADDRESS=${AERODROME_ADAPTER_ADDRESS:-0xf919A01510591f38407AA4BBE5711646DB6819e3}
+      - EXECUTOR_ADDRESS=${EXECUTOR_ADDRESS:-0x7528861E7DD09dc9B1e5149542e897d984Ceda7f}
+      - AVAX_EXECUTOR_ADDRESS=${AVAX_EXECUTOR_ADDRESS:-0xc35059D1BC395Ff0F6fDcEA1b7F365E3aa7C1D12}
+      - AVAX_RPC_URL=${AVAX_RPC_URL:-https://api.avax.network/ext/bc/C/rpc}
+      - DCA_VAULT_ADDRESS=${DCA_VAULT_ADDRESS:-0x155eC4256cC6f11f3d4C21Af28a2a1CC31f730d1}
+      - ALLOWED_ORIGINS=http://localhost:7777,http://localhost:3000,http://localhost:3010
     env_file:
       - .env
     restart: always

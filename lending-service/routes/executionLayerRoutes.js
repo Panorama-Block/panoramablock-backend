@@ -17,18 +17,36 @@ const EXECUTION_LAYER_URL = process.env.EXECUTION_LAYER_URL || 'http://localhost
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/** Returns true when the error looks like the execution layer is down or returned garbage. */
+function isServiceError(err) {
+  const code = err?.cause?.code ?? err?.code ?? '';
+  return ['ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'UND_ERR_CONNECT_TIMEOUT', 'FETCH_ERROR']
+    .includes(code)
+    || /fetch failed|ECONNREFUSED|Unexpected token|not valid JSON/i.test(err?.message ?? '');
+}
+
+/** Safely parse JSON from a fetch response; throws on non-2xx or non-JSON bodies. */
+async function safeJson(res) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 120)}`);
+  }
+}
+
 async function proxyToExecutionLayer(path, body) {
   const res = await fetch(`${EXECUTION_LAYER_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  return res.json();
+  return safeJson(res);
 }
 
 async function getFromExecutionLayer(path) {
   const res = await fetch(`${EXECUTION_LAYER_URL}${path}`);
-  return res.json();
+  return safeJson(res);
 }
 
 /**
@@ -73,12 +91,16 @@ function mapBundleToLendingResponse(bundle, actionKey) {
  * GET /benqi/markets
  * Proxies to execution layer /avax/lending/markets
  */
-router.get('/benqi/markets', async (req, res) => {
+router.get('/benqi/markets', async (req, res, next) => {
   try {
     const data = await getFromExecutionLayer('/avax/lending/markets');
     if (data.error) return res.status(500).json({ error: data.error });
     res.json(data);
   } catch (err) {
+    if (isServiceError(err)) {
+      console.warn('[executionLayerProxy] execution layer unreachable, falling back to legacy route');
+      return next('route');
+    }
     console.error('[executionLayerProxy] markets error:', err.message);
     res.status(500).json({ error: 'Failed to fetch markets from execution layer' });
   }
@@ -88,12 +110,16 @@ router.get('/benqi/markets', async (req, res) => {
  * GET /benqi/account/:address
  * Proxies to execution layer /avax/lending/position/:address
  */
-router.get('/benqi/account/:address', async (req, res) => {
+router.get('/benqi/account/:address', async (req, res, next) => {
   try {
     const data = await getFromExecutionLayer(`/avax/lending/position/${req.params.address}`);
     if (data.error) return res.status(500).json({ error: data.error });
     res.json(data);
   } catch (err) {
+    if (isServiceError(err)) {
+      console.warn('[executionLayerProxy] execution layer unreachable, falling back to legacy route');
+      return next('route');
+    }
     console.error('[executionLayerProxy] account position error:', err.message);
     res.status(500).json({ error: 'Failed to fetch position from execution layer' });
   }
@@ -104,7 +130,7 @@ router.get('/benqi/account/:address', async (req, res) => {
  * Returns lending positions in the format expected by the miniapp LendingApiClient.
  * Maps execution layer /avax/lending/position/:address → { data: LendingAccountPositionsResponse }
  */
-router.get('/benqi/account/:address/positions', async (req, res) => {
+router.get('/benqi/account/:address/positions', async (req, res, next) => {
   try {
     const address = req.params.address;
     const data = await getFromExecutionLayer(`/avax/lending/position/${address}`);
@@ -134,6 +160,10 @@ router.get('/benqi/account/:address/positions', async (req, res) => {
       },
     });
   } catch (err) {
+    if (isServiceError(err)) {
+      console.warn('[executionLayerProxy] execution layer unreachable, falling back to legacy route');
+      return next('route');
+    }
     console.error('[executionLayerProxy] account positions error:', err.message);
     res.status(500).json({ error: 'Failed to fetch positions from execution layer' });
   }
@@ -261,6 +291,32 @@ router.post('/benqi-validation/getValidationAndBorrowQuote', async (req, res) =>
 
 // ─── Liquid Staking (AVAX → sAVAX via PanoramaLiquidStaking) ─────────────────
 
+// sAVAX on Avalanche C-Chain
+const SAVAX_ADDRESS = '0x2b2C81e08f1Af8835a78Bb2A90AE924ACE0eA4bE';
+const SAVAX_ABI = [
+  'function balanceOf(address) view returns (uint256)',
+  'function getPooledAvaxByShares(uint256) view returns (uint256)',
+];
+
+/** Lightweight on-chain fallback for liquid-staking position when execution layer is down. */
+async function getPositionFallback(userAddress) {
+  const { ethers } = require('ethers');
+  const rpcUrl = process.env.AVALANCHE_RPC_URL || process.env.RPC_URL_AVALANCHE || 'https://api.avax.network/ext/bc/C/rpc';
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const sAvax = new ethers.Contract(SAVAX_ADDRESS, SAVAX_ABI, provider);
+
+  const balance = await sAvax.balanceOf(userAddress);
+  const avaxValue = balance > 0n ? await sAvax.getPooledAvaxByShares(balance) : 0n;
+
+  return {
+    userAddress,
+    sAvaxBalance: balance.toString(),
+    avaxEquivalent: avaxValue.toString(),
+    exchangeRate: balance > 0n ? (Number(avaxValue) / Number(balance)).toFixed(6) : '1.0',
+    pendingUnlocks: [],
+  };
+}
+
 /**
  * GET /liquid-staking/position/:address
  */
@@ -270,6 +326,15 @@ router.get('/liquid-staking/position/:address', async (req, res) => {
     if (data.error) return res.status(500).json({ error: data.error });
     res.json(data);
   } catch (err) {
+    if (isServiceError(err)) {
+      console.warn('[executionLayerProxy] execution layer unreachable, using on-chain fallback for liquid-staking position');
+      try {
+        const fallback = await getPositionFallback(req.params.address);
+        return res.json(fallback);
+      } catch (fallbackErr) {
+        console.error('[executionLayerProxy] on-chain fallback failed:', fallbackErr.message);
+      }
+    }
     res.status(500).json({ error: 'Failed to fetch staking position' });
   }
 });
@@ -289,6 +354,9 @@ router.post('/liquid-staking/prepare-stake', async (req, res) => {
     const steps = data.bundle?.steps ?? [];
     res.json({ status: 200, data: { stake: steps[0] ?? null, bundle: data.bundle, metadata: data.metadata } });
   } catch (err) {
+    if (isServiceError(err)) {
+      return res.status(503).json({ status: 503, data: { error: 'Execution layer is unavailable. Please try again later.' } });
+    }
     res.status(500).json({ status: 500, data: { error: 'Stake preparation failed' } });
   }
 });
@@ -307,6 +375,9 @@ router.post('/liquid-staking/prepare-request-unlock', async (req, res) => {
     if (data.error) return res.status(400).json({ status: 400, data: { error: data.error } });
     res.json({ status: 200, data: { bundle: data.bundle, metadata: data.metadata } });
   } catch (err) {
+    if (isServiceError(err)) {
+      return res.status(503).json({ status: 503, data: { error: 'Execution layer is unavailable. Please try again later.' } });
+    }
     res.status(500).json({ status: 500, data: { error: 'Request unlock preparation failed' } });
   }
 });
@@ -326,6 +397,9 @@ router.post('/liquid-staking/prepare-redeem', async (req, res) => {
     const steps = data.bundle?.steps ?? [];
     res.json({ status: 200, data: { redeem: steps[0] ?? null, bundle: data.bundle, metadata: data.metadata } });
   } catch (err) {
+    if (isServiceError(err)) {
+      return res.status(503).json({ status: 503, data: { error: 'Execution layer is unavailable. Please try again later.' } });
+    }
     res.status(500).json({ status: 500, data: { error: 'Redeem preparation failed' } });
   }
 });
