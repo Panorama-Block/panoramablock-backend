@@ -28,7 +28,7 @@ export class AerodromeProviderAdapter implements ISwapProvider {
     const baseURL = `${base.replace(/\/+$/, "")}/provider/swap`;
     this.client = axios.create({
       baseURL,
-      timeout: 45000,
+      timeout: 10000,
       headers: { "Content-Type": "application/json" },
     });
     console.log(`[⛽ AERODROME] Inicializado — Execution Layer em: ${baseURL}`);
@@ -54,7 +54,7 @@ export class AerodromeProviderAdapter implements ISwapProvider {
         toChainId: params.toChainId,
         fromToken: params.fromToken,
         toToken: params.toToken,
-      });
+      }, { timeout: 3000 });
 
       const supported = response.data?.supported === true;
       const reason = response.data?.reason || "";

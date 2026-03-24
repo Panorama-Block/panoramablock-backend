@@ -44,7 +44,8 @@ export class ChainProviderAdapter implements IChainProvider {
           weight: 1,
         }));
 
-        this.providers[chainId] = new ethers.providers.FallbackProvider(rpcProviders, chainId);
+        // In ethers v5, second arg is quorum (not chainId). Use 1 = any single provider success is enough.
+        this.providers[chainId] = new ethers.providers.FallbackProvider(rpcProviders, 1);
         console.log(`[ChainProviderAdapter] Chain ${chainId}: ${rpcUrls.length} RPC endpoints (fallback enabled)`);
       }
     }
