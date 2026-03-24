@@ -11,12 +11,14 @@ import { CircuitBreakerManager, CIRCUIT_BREAKERS } from './circuitBreaker.servic
  * Uses Uniswap V3 quoter for accurate price estimation
  */
 export class QuoteService {
-  private circuitBreaker = CircuitBreakerManager.getBreaker(CIRCUIT_BREAKERS.UNISWAP_QUOTER, {
-    failureThreshold: 3,
-    successThreshold: 2,
-    timeout: 30000, // 30 seconds
-    monitoringWindow: 60000, // 1 minute
-  });
+  private getCircuitBreaker(chainId: number) {
+    return CircuitBreakerManager.getBreaker(`${CIRCUIT_BREAKERS.UNISWAP_QUOTER}-${chainId}`, {
+      failureThreshold: 3,
+      successThreshold: 2,
+      timeout: 30000,
+      monitoringWindow: 60000,
+    });
+  }
 
   /**
    * Get expected output amount for a swap
@@ -34,8 +36,8 @@ export class QuoteService {
     amountOutMinimum: bigint;
     priceImpact: number;
   }> {
-    // Use circuit breaker to protect against repeated failures
-    return this.circuitBreaker.execute(async () => {
+    // Use per-chain circuit breaker to avoid cross-chain failure propagation
+    return this.getCircuitBreaker(params.chainId).execute(async () => {
       try {
       console.log('[QuoteService] Getting quote for swap:', {
         fromToken: params.fromToken,

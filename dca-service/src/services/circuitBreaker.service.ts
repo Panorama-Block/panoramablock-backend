@@ -79,6 +79,12 @@ export class CircuitBreaker {
 
       return result;
     } catch (error) {
+      // Skip circuit breaker counting for user-data errors (e.g. insufficient funds).
+      // These are not service failures and should not affect circuit state.
+      if ((error as any)?.skipCircuitBreaker) {
+        throw error;
+      }
+
       // Record failure
       this.onFailure();
 

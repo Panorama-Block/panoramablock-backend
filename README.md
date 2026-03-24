@@ -73,7 +73,7 @@ go run cmd/main.go
 
 ## Testes
 
-Consulte o arquivo [TESTING.md](TESTING.md) para instruções detalhadas sobre como testar os serviços.
+Consulte o arquivo [TESTING.md](docs/testing/TESTING.md) para instruções detalhadas sobre como testar os serviços.
 
 ## Estrutura de Diretórios
 

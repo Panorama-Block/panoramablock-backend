@@ -44,27 +44,27 @@ interface ErrorMappingConfig {
 
 const DEFAULT_PRIMARY_ACTION = {
   type: 'retry' as const,
-  label: 'Tentar novamente',
+  label: 'Try again',
 };
 
 const ERROR_MAPPINGS: Partial<Record<SwapErrorCode, ErrorMappingConfig>> = {
   [SwapErrorCode.MISSING_REQUIRED_PARAMS]: {
     category: 'user-action',
-    title: 'Informações incompletas',
+    title: 'Incomplete information',
     description:
-      'Para continuar, preencha todos os campos obrigatórios da operação.',
+      'Please fill in all required fields to continue.',
   },
   [SwapErrorCode.INVALID_REQUEST]: {
     category: 'user-action',
-    title: 'Algo não confere',
+    title: 'Invalid request',
     description:
-      'Revise os dados informados. Alguns valores parecem estar fora do formato esperado.',
+      'Some values appear to be in an unexpected format. Please review and try again.',
   },
   [SwapErrorCode.INVALID_AMOUNT]: {
     category: 'user-action',
-    title: 'Valor inválido',
+    title: 'Invalid amount',
     description:
-      'O valor informado não pôde ser processado. Ajuste o montante e tente outra vez.',
+      'The amount could not be processed. Please adjust the value and try again.',
   },
   [SwapErrorCode.AMOUNT_TOO_LOW]: {
     category: 'user-action',
@@ -80,146 +80,146 @@ const ERROR_MAPPINGS: Partial<Record<SwapErrorCode, ErrorMappingConfig>> = {
   },
   [SwapErrorCode.INVALID_TOKEN_ADDRESS]: {
     category: 'user-action',
-    title: 'Token desconhecido',
+    title: 'Unknown token',
     description:
-      'Não conseguimos reconhecer esse token. Confirme o endereço antes de prosseguir.',
+      'We could not recognize this token. Please verify the address before proceeding.',
   },
   [SwapErrorCode.INVALID_CHAIN]: {
     category: 'user-action',
-    title: 'Rede incompatível',
+    title: 'Unsupported network',
     description:
-      'Selecione uma rede suportada pela Panorama Block para continuar.',
+      'Please select a network supported by Panorama Block to continue.',
   },
   [SwapErrorCode.UNSUPPORTED_CHAIN]: {
     category: 'user-action',
-    title: 'Rede não suportada',
+    title: 'Network not supported',
     description:
-      'Ainda não temos suporte para essa rede. Escolha outra opção disponível.',
+      'This network is not yet supported. Please choose another available option.',
   },
   [SwapErrorCode.UNSUPPORTED_TOKEN]: {
     category: 'user-action',
-    title: 'Token não suportado',
+    title: 'Token not supported',
     description:
-      'Esse ativo ainda não faz parte da nossa lista. Tente outro token ou fale com o suporte.',
+      'This asset is not yet on our list. Try another token or contact support.',
   },
   [SwapErrorCode.INSUFFICIENT_LIQUIDITY]: {
     category: 'user-action',
-    title: 'Liquidez insuficiente',
+    title: 'Insufficient liquidity',
     description:
-      'Neste momento não há liquidez suficiente para completar essa troca. Vale tentar com um valor menor.',
+      'There is not enough liquidity to complete this swap right now. Try a smaller amount.',
   },
   [SwapErrorCode.NO_ROUTE_FOUND]: {
     category: 'user-action',
-    title: 'Rota indisponível',
+    title: 'Route unavailable',
     description:
-      'Não encontramos um caminho seguro entre esses ativos. Tente outro par ou rede.',
+      'No route was found for this token pair. Try a different pair or network.',
   },
   [SwapErrorCode.PRICE_IMPACT_TOO_HIGH]: {
     category: 'user-action',
-    title: 'Impacto de preço alto',
+    title: 'High price impact',
     description:
-      'Essa operação impacta muito o preço do token. Ajuste o valor ou aguarde melhores condições.',
+      'This swap would move the price significantly. Reduce the amount or wait for better conditions.',
   },
   [SwapErrorCode.SLIPPAGE_TOO_HIGH]: {
-    category: 'user-action',
-    title: 'Slippage acima do limite',
+    category: 'temporary',
+    title: 'Quote expired',
     description:
-      'A tolerância de slippage está acima do permitido. Revise as preferências e tente novamente.',
+      'The price moved since your last quote and the transaction was blocked to protect your funds. Please try again for an updated price.',
   },
   [SwapErrorCode.APPROVAL_REQUIRED]: {
     category: 'user-action',
-    title: 'Aprovação necessária',
+    title: 'Approval required',
     description:
-      'Você precisa autorizar o uso do token antes de concluir a troca. Faça a aprovação e tente novamente.',
+      'You need to approve the token before completing the swap. Please approve and try again.',
   },
   [SwapErrorCode.INSUFFICIENT_BALANCE]: {
     category: 'user-action',
-    title: 'Saldo insuficiente',
+    title: 'Insufficient balance',
     description:
-      'Seu saldo não cobre essa operação. Refaça o cálculo ou adicione fundos.',
+      'Your balance does not cover this operation. Please add funds or reduce the amount.',
   },
   [SwapErrorCode.INVALID_GAS_PARAMS]: {
     category: 'temporary',
-    title: 'Parâmetros de gas inválidos',
+    title: 'Invalid gas parameters',
     description:
-      'O provedor retornou parâmetros de gas inconsistentes. Tente novamente ou escolha outra rota.',
+      'The provider returned inconsistent gas parameters. Please try again or choose a different route.',
   },
   [SwapErrorCode.RATE_LIMIT_EXCEEDED]: {
     category: 'temporary',
-    title: 'Muitos pedidos em sequência',
+    title: 'Too many requests',
     description:
-      'Recebemos várias tentativas em pouco tempo. Espere alguns instantes antes de tentar de novo.',
+      'We received too many requests in a short time. Please wait a moment before trying again.',
   },
   [SwapErrorCode.QUOTA_EXCEEDED]: {
     category: 'temporary',
-    title: 'Limite atingido',
+    title: 'Usage limit reached',
     description:
-      'Você atingiu o limite de uso por agora. Aguarde e tente novamente mais tarde.',
+      'You have reached the usage limit for now. Please wait and try again later.',
   },
   [SwapErrorCode.TIMEOUT]: {
     category: 'temporary',
-    title: 'Demorou demais',
+    title: 'Request timed out',
     description:
-      'A operação demorou para responder. Tente novamente e, se continuar, chame o suporte.',
+      'The operation took too long to respond. Please try again. If the issue persists, contact support.',
   },
   [SwapErrorCode.RPC_ERROR]: {
     category: 'temporary',
-    title: 'Oscilação na rede',
+    title: 'Network instability',
     description:
-      'A rede está instável no momento. Tentaremos novamente se você insistir.',
+      'The network is temporarily unstable. Please try again.',
   },
   [SwapErrorCode.PROVIDER_ERROR]: {
     category: 'temporary',
-    title: 'Instabilidade do provedor',
+    title: 'Provider error',
     description:
-      'Nosso provedor de liquidez não respondeu como deveria. Normalmente isso se resolve em instantes.',
+      'Our liquidity provider did not respond as expected. This usually resolves in a moment.',
   },
   [SwapErrorCode.CACHE_ERROR]: {
     category: 'temporary',
-    title: 'Oscilação no cache',
+    title: 'Cache error',
     description:
-      'Atualizamos algumas informações e o pedido não foi completado. Tente mais uma vez.',
+      'Some cached data was refreshed and the request could not be completed. Please try again.',
   },
   [SwapErrorCode.DATABASE_ERROR]: {
     category: 'temporary',
-    title: 'Instabilidade temporária',
+    title: 'Temporary instability',
     description:
-      'Estamos com oscilações internas. Tente novamente em alguns instantes.',
+      'We are experiencing internal instability. Please try again in a few moments.',
   },
   [SwapErrorCode.UNAUTHORIZED]: {
     category: 'blocked',
-    title: 'Sessão expirada',
+    title: 'Session expired',
     description:
-      'Faça login novamente para continuar com segurança.',
+      'Please log in again to continue securely.',
     secondaryAction: {
       type: 'support',
-      label: 'Falar com o suporte',
+      label: 'Contact support',
     },
   },
   [SwapErrorCode.FORBIDDEN]: {
     category: 'blocked',
-    title: 'Acesso restrito',
+    title: 'Access restricted',
     description:
-      'Esta ação não está disponível para o seu perfil. Se precisar, fale com o suporte.',
+      'This action is not available for your profile. Please contact support if you need assistance.',
     secondaryAction: {
       type: 'support',
-      label: 'Falar com o suporte',
+      label: 'Contact support',
     },
   },
   [SwapErrorCode.SERVICE_UNAVAILABLE]: {
     category: 'blocked',
-    title: 'Serviço temporariamente indisponível',
+    title: 'Service temporarily unavailable',
     description:
-      'Estamos passando por manutenção ou instabilidade. Tente novamente em breve.',
+      'We are undergoing maintenance or experiencing instability. Please try again shortly.',
   },
   [SwapErrorCode.MAINTENANCE]: {
     category: 'blocked',
-    title: 'Estamos em manutenção',
+    title: 'Under maintenance',
     description:
-      'Voltaremos em instantes. Obrigado por aguardar.',
+      'We will be back shortly. Thank you for your patience.',
     secondaryAction: {
       type: 'support',
-      label: 'Acompanhar status',
+      label: 'Check status',
       href: 'https://status.panoramablock.com',
     },
   },
@@ -266,10 +266,10 @@ export class UserFacingErrorMapper {
         category,
         title:
           mapping?.title ||
-          'Estamos enfrentando uma instabilidade pontual',
+          'Unexpected error',
         description:
           mapping?.description ||
-          'Algo inesperado aconteceu, mas já estamos acompanhando aqui. Tente novamente em alguns instantes.',
+          'Something unexpected happened. Please try again in a moment.',
         actions: {
           primary: {
             ...DEFAULT_PRIMARY_ACTION,

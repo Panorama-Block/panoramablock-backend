@@ -17,8 +17,9 @@ const router = express.Router();
 const benqiRateLimiter = createRateLimiter(100, 15 * 60 * 1000); // 100 requests por 15 minutos
 
 // --- Performance guardrails (trust-first: cache is short-lived; on-chain remains source of truth) ---
-const BENQI_MARKETS_CACHE_TTL_MS = Number(process.env.BENQI_MARKETS_CACHE_TTL_MS || 60_000);
-const BENQI_QTOKENS_CACHE_TTL_MS = Number(process.env.BENQI_QTOKENS_CACHE_TTL_MS || 120_000);
+const BENQI_MARKETS_CACHE_TTL_MS = Number(process.env.BENQI_MARKETS_CACHE_TTL_MS || 300_000); // 5min — APR/TVL data changes slowly
+const BENQI_QTOKENS_CACHE_TTL_MS = Number(process.env.BENQI_QTOKENS_CACHE_TTL_MS || 300_000); // 5min — qToken list is near-static
+const BENQI_POSITIONS_CACHE_TTL_MS = Math.max(5_000, Number(process.env.BENQI_POSITIONS_CACHE_TTL_MS || 20_000));
 // Slightly higher concurrency reduces tail-latency for /benqi/markets without spamming the RPC.
 const BENQI_MARKETS_CONCURRENCY = Math.max(1, Number(process.env.BENQI_MARKETS_CONCURRENCY || 6));
 // Keep per-call timeouts tight so the endpoint completes quickly; return partial rows if a call times out.
@@ -36,6 +37,8 @@ let marketsCache = { ts: 0, payload: null };
 let marketsInFlight = null;
 let qTokensCache = { ts: 0, payload: null };
 let qTokensInFlight = null;
+const positionsCache = new Map();
+const positionsInFlight = new Map();
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -79,13 +82,35 @@ function isFresh(ts, ttlMs = BENQI_MARKETS_CACHE_TTL_MS) {
   return ts && (Date.now() - ts) < ttlMs;
 }
 
+function buildPositionsCacheKey(address, rpcUrl) {
+  return `${String(address || '').toLowerCase()}::${String(rpcUrl || '').toLowerCase()}`;
+}
+
+function prunePositionsCache() {
+  const entries = Array.from(positionsCache.entries());
+  for (const [key, entry] of entries) {
+    if (!entry || !isFresh(entry.ts, BENQI_POSITIONS_CACHE_TTL_MS)) {
+      positionsCache.delete(key);
+    }
+  }
+
+  // Safety bound for long-running processes with many unique wallets.
+  if (positionsCache.size > 1000) {
+    const overflow = positionsCache.size - 1000;
+    let dropped = 0;
+    for (const key of positionsCache.keys()) {
+      positionsCache.delete(key);
+      dropped += 1;
+      if (dropped >= overflow) break;
+    }
+  }
+}
+
+const { createAvalancheProvider: createAvalancheProviderBase } = require('../lib/provider');
+
 function createAvalancheProvider(rpcUrlOverride) {
-  const rpcUrl = rpcUrlOverride || NETWORKS.AVALANCHE.rpcUrl;
-  return new ethers.JsonRpcProvider(rpcUrl, {
-    name: 'avalanche',
-    chainId: 43114
-  }, {
-    staticNetwork: true,
+  return createAvalancheProviderBase({
+    rpcUrlOverride,
     batchMaxCount: BENQI_RPC_BATCH_MAX_COUNT,
     batchStallTime: BENQI_RPC_BATCH_STALL_TIME_MS,
   });
@@ -823,228 +848,256 @@ router.get('/account/:address/positions',
       }
 
       const rpcUrl = rpc || NETWORKS.AVALANCHE.rpcUrl;
-      const provider = createAvalancheProvider(rpcUrl);
+      const cacheKey = buildPositionsCacheKey(address, rpcUrl);
 
-      const benqiService = new BenqiService(provider);
-      const warnings = [];
-
-      const ERC20_ABI = [
-        'function decimals() external view returns (uint8)',
-        'function symbol() external view returns (string)'
-      ];
-
-      let liquidity = {
-        accountAddress: address,
-        errorCode: '0',
-        liquidity: '0',
-        shortfall: '0',
-        isHealthy: true,
-      };
-      let assetsIn = {
-        accountAddress: address,
-        assets: [],
-        count: 0,
-      };
-
-      try {
-        liquidity = await withTimeout(
-          benqiService.getAccountLiquidity(address),
-          BENQI_RPC_TIMEOUT_MS
-        );
-      } catch (e) {
-        console.warn('[BENQI] getAccountLiquidity failed (serving degraded positions):', compactRpcError(e));
-        warnings.push(
-          isRateLimitedRpcError(e)
-            ? 'RPC rate limited while fetching liquidity. Returning partial positions.'
-            : isTimeoutRpcError(e)
-              ? 'Liquidity request timed out. Returning partial positions.'
-              : 'Liquidity temporarily unavailable. Returning partial positions.'
-        );
+      prunePositionsCache();
+      const cached = positionsCache.get(cacheKey);
+      if (cached && isFresh(cached.ts, BENQI_POSITIONS_CACHE_TTL_MS)) {
+        return res.json(cached.payload);
       }
 
-      try {
-        assetsIn = await withTimeout(
-          benqiService.getAssetsIn(address),
-          BENQI_RPC_TIMEOUT_MS
-        );
-      } catch (e) {
-        console.warn('[BENQI] getAssetsIn failed (serving degraded positions):', compactRpcError(e));
-        warnings.push(
-          isRateLimitedRpcError(e)
-            ? 'RPC rate limited while fetching collateral markets.'
-            : isTimeoutRpcError(e)
-              ? 'Collateral markets request timed out.'
-              : 'Collateral markets temporarily unavailable.'
-        );
+      const inFlight = positionsInFlight.get(cacheKey);
+      if (inFlight) {
+        const payload = await inFlight;
+        return res.json(payload);
       }
 
-      const collateralSet = new Set((assetsIn?.assets || []).map((a) => String(a).toLowerCase()));
+      const computePromise = (async () => {
+        const provider = createAvalancheProvider(rpcUrl);
+        const benqiService = new BenqiService(provider);
+        const warnings = [];
 
-      const positions = [];
+        const ERC20_ABI = [
+          'function decimals() external view returns (uint8)',
+          'function symbol() external view returns (string)'
+        ];
 
-      let qTokens = [];
-      try {
-        const qTokensRaw = await resolveBenqiQTokens({ benqiService, provider });
-        qTokens = (Array.isArray(qTokensRaw) ? qTokensRaw : []).filter((m) => {
-          return m && typeof m.symbol === 'string' && m.symbol.length > 0 && ethers.isAddress(m.address);
-        });
-      } catch (e) {
-        console.warn('[BENQI] Failed to resolve qTokens for positions:', compactRpcError(e));
-        warnings.push(
-          isRateLimitedRpcError(e)
-            ? 'RPC rate limited while listing markets. Returning partial position set.'
-            : isTimeoutRpcError(e)
-              ? 'Market discovery timed out. Returning partial position set.'
-              : 'Markets temporarily unavailable. Returning partial position set.'
-        );
-      }
+        let liquidity = {
+          accountAddress: address,
+          errorCode: '0',
+          liquidity: '0',
+          shortfall: '0',
+          isHealthy: true,
+        };
+        let assetsIn = {
+          accountAddress: address,
+          assets: [],
+          count: 0,
+        };
 
-      let rateLimitHits = 0;
-      let timeoutHits = 0;
-      const MAX_RATE_LIMIT_HITS = 3;
-      const MAX_TIMEOUT_HITS = 4;
-      let stopProcessing = false;
-      const positionsDeadlineAt = Date.now() + BENQI_POSITIONS_MAX_DURATION_MS;
-      const addWarning = (message) => {
-        if (message && !warnings.includes(message)) {
-          warnings.push(message);
-        }
-      };
-
-      const rows = await mapWithConcurrency(qTokens, BENQI_POSITIONS_CONCURRENCY, async (market) => {
-        if (stopProcessing || req.aborted || req.destroyed) {
-          return null;
-        }
-        if (Date.now() > positionsDeadlineAt) {
-          stopProcessing = true;
-          addWarning('Positions request deadline reached. Returned partial position set.');
-          return null;
-        }
-
-        const qTokenAddress = market.address;
-        if (!ethers.isAddress(qTokenAddress)) {
-          return null;
-        }
-
-        // Underlying resolution (same logic as /markets)
-        let underlyingAddress = null;
         try {
-          underlyingAddress = await withTimeout(
-            benqiService.getUnderlyingAddress(qTokenAddress),
+          liquidity = await withTimeout(
+            benqiService.getAccountLiquidity(address),
             BENQI_RPC_TIMEOUT_MS
           );
-        } catch {}
-        if (!underlyingAddress && market.underlying === 'AVAX') {
-          underlyingAddress = 'native';
+        } catch (e) {
+          console.warn('[BENQI] getAccountLiquidity failed (serving degraded positions):', compactRpcError(e));
+          warnings.push(
+            isRateLimitedRpcError(e)
+              ? 'RPC rate limited while fetching liquidity. Returning partial positions.'
+              : isTimeoutRpcError(e)
+                ? 'Liquidity request timed out. Returning partial positions.'
+                : 'Liquidity temporarily unavailable. Returning partial positions.'
+          );
         }
 
-        let underlyingDecimals = 18;
-        let underlyingSymbol = normalizeUnderlyingSymbol(market.underlying, underlyingAddress);
-
-        if (underlyingAddress && underlyingAddress !== 'native') {
-          try {
-            const token = new ethers.Contract(underlyingAddress, ERC20_ABI, provider);
-            const [dec, sym] = await withTimeout(
-              Promise.all([
-                token.decimals(),
-                token.symbol().catch(() => null),
-              ]),
-              BENQI_RPC_TIMEOUT_MS
-            );
-            underlyingDecimals = Number(dec);
-            if (sym && typeof sym === 'string') underlyingSymbol = sym;
-          } catch {}
-        }
-
-        let qTokenDecimals = 8;
         try {
-          const qTokenContract = new ethers.Contract(qTokenAddress, ERC20_ABI, provider);
-          const dec = await withTimeout(qTokenContract.decimals(), BENQI_RPC_TIMEOUT_MS);
-          qTokenDecimals = Number(dec);
-        } catch {}
-
-        let supply = null;
-        let borrow = null;
-        try {
-          [supply, borrow] = await withTimeout(
-            Promise.all([
-              benqiService.getQTokenBalance(qTokenAddress, address),
-              benqiService.getBorrowBalance(qTokenAddress, address),
-            ]),
-            BENQI_BALANCE_TIMEOUT_MS
+          assetsIn = await withTimeout(
+            benqiService.getAssetsIn(address),
+            BENQI_RPC_TIMEOUT_MS
           );
         } catch (e) {
-          // Skip markets that error on snapshot calls.
-          console.warn(`[BENQI] Failed to fetch balances for ${market.symbol} (${qTokenAddress}):`, compactRpcError(e));
-          if (isRateLimitedRpcError(e)) {
-            rateLimitHits += 1;
-            if (rateLimitHits >= MAX_RATE_LIMIT_HITS) {
-              addWarning('RPC rate limit reached while fetching balances. Returned partial position set.');
-              stopProcessing = true;
-            }
-          }
-          if (isTimeoutRpcError(e)) {
-            timeoutHits += 1;
-            if (timeoutHits >= MAX_TIMEOUT_HITS) {
-              addWarning('RPC timeout threshold reached while fetching balances. Returned partial position set.');
-              stopProcessing = true;
-            }
-          }
-          return null;
+          console.warn('[BENQI] getAssetsIn failed (serving degraded positions):', compactRpcError(e));
+          warnings.push(
+            isRateLimitedRpcError(e)
+              ? 'RPC rate limited while fetching collateral markets.'
+              : isTimeoutRpcError(e)
+                ? 'Collateral markets request timed out.'
+                : 'Collateral markets temporarily unavailable.'
+          );
         }
 
-        const suppliedWei = supply?.underlyingBalance || '0';
-        const qTokenBalanceWei = supply?.qTokenBalance || '0';
-        const borrowedWei = borrow?.borrowBalance || '0';
-        const supplied = BigInt(suppliedWei || '0');
-        const borrowed = BigInt(borrowedWei || '0');
-        const qTokenBalance = BigInt(qTokenBalanceWei || '0');
+        const collateralSet = new Set((assetsIn?.assets || []).map((a) => String(a).toLowerCase()));
 
-        if (supplied === 0n && borrowed === 0n && qTokenBalance === 0n) {
-          return null;
+        const positions = [];
+
+        let qTokens = [];
+        try {
+          const qTokensRaw = await resolveBenqiQTokens({ benqiService, provider });
+          qTokens = (Array.isArray(qTokensRaw) ? qTokensRaw : []).filter((m) => {
+            return m && typeof m.symbol === 'string' && m.symbol.length > 0 && ethers.isAddress(m.address);
+          });
+        } catch (e) {
+          console.warn('[BENQI] Failed to resolve qTokens for positions:', compactRpcError(e));
+          warnings.push(
+            isRateLimitedRpcError(e)
+              ? 'RPC rate limited while listing markets. Returning partial position set.'
+              : isTimeoutRpcError(e)
+                ? 'Market discovery timed out. Returning partial position set.'
+                : 'Markets temporarily unavailable. Returning partial position set.'
+          );
         }
 
-        return {
-          chainId: 43114,
-          protocol: 'benqi',
-          qTokenAddress,
-          qTokenSymbol: market.symbol,
-          underlyingAddress,
-          underlyingSymbol,
-          underlyingDecimals,
-          qTokenDecimals,
-          qTokenBalanceWei,
-          suppliedWei,
-          borrowedWei,
-          collateralEnabled: collateralSet.has(String(qTokenAddress).toLowerCase()),
+        let rateLimitHits = 0;
+        let timeoutHits = 0;
+        const MAX_RATE_LIMIT_HITS = 3;
+        const MAX_TIMEOUT_HITS = 4;
+        let stopProcessing = false;
+        const positionsDeadlineAt = Date.now() + BENQI_POSITIONS_MAX_DURATION_MS;
+        const addWarning = (message) => {
+          if (message && !warnings.includes(message)) {
+            warnings.push(message);
+          }
         };
-      });
 
-      for (const row of rows) {
-        if (row && !row.__error) {
-          positions.push(row);
+        const rows = await mapWithConcurrency(qTokens, BENQI_POSITIONS_CONCURRENCY, async (market) => {
+          if (stopProcessing || req.aborted || req.destroyed) {
+            return null;
+          }
+          if (Date.now() > positionsDeadlineAt) {
+            stopProcessing = true;
+            addWarning('Positions request deadline reached. Returned partial position set.');
+            return null;
+          }
+
+          const qTokenAddress = market.address;
+          if (!ethers.isAddress(qTokenAddress)) {
+            return null;
+          }
+
+          // Underlying resolution (same logic as /markets)
+          let underlyingAddress = null;
+          try {
+            underlyingAddress = await withTimeout(
+              benqiService.getUnderlyingAddress(qTokenAddress),
+              BENQI_RPC_TIMEOUT_MS
+            );
+          } catch {}
+          if (!underlyingAddress && market.underlying === 'AVAX') {
+            underlyingAddress = 'native';
+          }
+
+          let underlyingDecimals = 18;
+          let underlyingSymbol = normalizeUnderlyingSymbol(market.underlying, underlyingAddress);
+
+          if (underlyingAddress && underlyingAddress !== 'native') {
+            try {
+              const token = new ethers.Contract(underlyingAddress, ERC20_ABI, provider);
+              const [dec, sym] = await withTimeout(
+                Promise.all([
+                  token.decimals(),
+                  token.symbol().catch(() => null),
+                ]),
+                BENQI_RPC_TIMEOUT_MS
+              );
+              underlyingDecimals = Number(dec);
+              if (sym && typeof sym === 'string') underlyingSymbol = sym;
+            } catch {}
+          }
+
+          let qTokenDecimals = 8;
+          try {
+            const qTokenContract = new ethers.Contract(qTokenAddress, ERC20_ABI, provider);
+            const dec = await withTimeout(qTokenContract.decimals(), BENQI_RPC_TIMEOUT_MS);
+            qTokenDecimals = Number(dec);
+          } catch {}
+
+          let supply = null;
+          let borrow = null;
+          try {
+            [supply, borrow] = await withTimeout(
+              Promise.all([
+                benqiService.getQTokenBalance(qTokenAddress, address),
+                benqiService.getBorrowBalance(qTokenAddress, address),
+              ]),
+              BENQI_BALANCE_TIMEOUT_MS
+            );
+          } catch (e) {
+            // Skip markets that error on snapshot calls.
+            console.warn(`[BENQI] Failed to fetch balances for ${market.symbol} (${qTokenAddress}):`, compactRpcError(e));
+            if (isRateLimitedRpcError(e)) {
+              rateLimitHits += 1;
+              if (rateLimitHits >= MAX_RATE_LIMIT_HITS) {
+                addWarning('RPC rate limit reached while fetching balances. Returned partial position set.');
+                stopProcessing = true;
+              }
+            }
+            if (isTimeoutRpcError(e)) {
+              timeoutHits += 1;
+              if (timeoutHits >= MAX_TIMEOUT_HITS) {
+                addWarning('RPC timeout threshold reached while fetching balances. Returned partial position set.');
+                stopProcessing = true;
+              }
+            }
+            return null;
+          }
+
+          const suppliedWei = supply?.underlyingBalance || '0';
+          const qTokenBalanceWei = supply?.qTokenBalance || '0';
+          const borrowedWei = borrow?.borrowBalance || '0';
+          const supplied = BigInt(suppliedWei || '0');
+          const borrowed = BigInt(borrowedWei || '0');
+          const qTokenBalance = BigInt(qTokenBalanceWei || '0');
+
+          if (supplied === 0n && borrowed === 0n && qTokenBalance === 0n) {
+            return null;
+          }
+
+          return {
+            chainId: 43114,
+            protocol: 'benqi',
+            qTokenAddress,
+            qTokenSymbol: market.symbol,
+            underlyingAddress,
+            underlyingSymbol,
+            underlyingDecimals,
+            qTokenDecimals,
+            qTokenBalanceWei,
+            suppliedWei,
+            borrowedWei,
+            collateralEnabled: collateralSet.has(String(qTokenAddress).toLowerCase()),
+          };
+        });
+
+        for (const row of rows) {
+          if (row && !row.__error) {
+            positions.push(row);
+          }
         }
+
+        const responsePayload = {
+          status: 200,
+          msg: 'success',
+          data: {
+            accountAddress: address,
+            liquidity,
+            positions,
+            updatedAt: Date.now(),
+            ...(warnings.length ? { warnings } : {}),
+          }
+        };
+
+        if (databaseGatewayClient.isEnabled()) {
+          databaseGatewayClient
+            .syncAccountPositions(address, responsePayload.data)
+            .catch((e) => console.warn('[BENQI][DB-GATEWAY] Failed to sync positions:', e?.message || e));
+        }
+
+        return responsePayload;
+      })();
+
+      positionsInFlight.set(cacheKey, computePromise);
+
+      let responsePayload;
+      try {
+        responsePayload = await computePromise;
+      } finally {
+        positionsInFlight.delete(cacheKey);
       }
 
-      const responsePayload = {
-        status: 200,
-        msg: 'success',
-        data: {
-          accountAddress: address,
-          liquidity,
-          positions,
-          updatedAt: Date.now(),
-          ...(warnings.length ? { warnings } : {}),
-        }
-      };
-
-      if (databaseGatewayClient.isEnabled()) {
-        databaseGatewayClient
-          .syncAccountPositions(address, responsePayload.data)
-          .catch((e) => console.warn('[BENQI][DB-GATEWAY] Failed to sync positions:', e?.message || e));
-      }
-
-      res.json(responsePayload);
+      positionsCache.set(cacheKey, { ts: Date.now(), payload: responsePayload });
+      prunePositionsCache();
+      return res.json(responsePayload);
     } catch (error) {
       console.error('❌ Erro ao obter posições da conta:', compactRpcError(error));
       res.status(500).json({

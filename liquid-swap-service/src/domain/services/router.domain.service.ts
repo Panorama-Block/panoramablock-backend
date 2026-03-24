@@ -13,22 +13,17 @@ export interface ProviderSelectionResult {
   quote: SwapQuote;
 }
 
+const BASE_CHAIN_ID = 8453;
+
 /**
  * RouterDomainService
  *
  * Domain service that implements the business logic for selecting the best swap provider.
  *
- * Strategy:
- * 1. Same-chain swaps → Prioritize Uniswap (better liquidity, lower fees)
- * 2. Cross-chain swaps → Prioritize Thirdweb (specialized in bridges)
- * 3. Automatic fallback if preferred provider fails
- *
- * @example
- * ```typescript
- * const router = new RouterDomainService(providersMap);
- * const { provider, quote } = await router.selectBestProvider(swapRequest);
- * console.log('Selected:', provider.name);
- * ```
+ * Routing strategy:
+ * - Base same-chain  → Execution Layer (Aerodrome) first, then Uniswap, then Thirdweb
+ * - Other same-chain → Uniswap first, then Thirdweb
+ * - Cross-chain      → Thirdweb (bridge specialist)
  */
 export class RouterDomainService {
   private readonly smartRouterQuoteTimeoutMs: number;
@@ -61,11 +56,21 @@ export class RouterDomainService {
   public async selectBestProvider(
     request: SwapRequest
   ): Promise<ProviderSelectionResult> {
-    console.log(
-      `[RouterDomainService] Selecting provider for: ${request.toLogString()}`
-    );
+    const isSameChain = this.isSameChain(request);
+    const isBase = request.fromChainId === BASE_CHAIN_ID;
+    const routeType = isSameChain
+      ? isBase
+        ? "same-chain BASE"
+        : `same-chain (chain ${request.fromChainId})`
+      : `cross-chain (${request.fromChainId} → ${request.toChainId})`;
 
-    // 1. Build route parameters
+    console.log(`\n${"=".repeat(60)}`);
+    console.log(`[🔀 ROUTER] Nova requisição de quote`);
+    console.log(`[🔀 ROUTER]   Par    : ${request.fromToken} → ${request.toToken}`);
+    console.log(`[🔀 ROUTER]   Tipo   : ${routeType}`);
+    console.log(`[🔀 ROUTER]   Amount : ${request.amount.toString()} wei`);
+    console.log(`${"=".repeat(60)}`);
+
     const routeParams: RouteParams = {
       fromChainId: request.fromChainId,
       toChainId: request.toChainId,
@@ -73,28 +78,19 @@ export class RouterDomainService {
       toToken: request.toToken,
     };
 
-    // 2. Check which providers support this route (parallel checks for performance)
     const supportedProviders = await this.getSupportedProviders(routeParams);
 
     if (supportedProviders.length === 0) {
-      console.error(
-        "[RouterDomainService] ❌ No provider supports this route:",
-        routeParams
-      );
+      console.error(`[🔀 ROUTER] ❌ Nenhum provider suporta esta rota`);
       throw new Error(
         `No swap provider supports route ${request.fromChainId} → ${request.toChainId}`
       );
     }
 
     console.log(
-      "[RouterDomainService] Supported providers:",
-      supportedProviders.map((p) => p.name)
+      `[🔀 ROUTER] Providers disponíveis: [${supportedProviders.map((p) => p.name).join(", ")}]`
     );
 
-    // 3. Determine if same-chain or cross-chain
-    const isSameChain = this.isSameChain(request);
-
-    // 4. Apply priority logic and try to get quote
     if (isSameChain) {
       return await this.selectForSameChain(supportedProviders, request);
     } else {
@@ -128,150 +124,134 @@ export class RouterDomainService {
   }
 
   /**
-   * Select provider for same-chain swap
+   * Select provider for same-chain swap.
    *
-   * Priority: Uniswap Smart Router > Uniswap Trading API > Thirdweb
+   * Priority para Base (chain 8453):
+   *   1. Aerodrome via Execution Layer  (DEX nativo da Base, pools stable/volatile)
+   *   2. Uniswap Trading API            (fallback — pares não listados no Aerodrome)
+   *   3. Thirdweb                       (último recurso)
    *
-   * Rationale:
-   * - Smart Router is Priority 1: Now fixed to ALWAYS include approval with MaxUint256,
-   *   can route through both V2 and V3 pools for best pricing
-   * - Trading API is Priority 2: Official Uniswap API (V3 only) with MaxUint256 approvals
-   * - Thirdweb is Priority 3: Uses exact amount approvals which can cause issues
-   *
-   * CRITICAL FIX: Thirdweb approves exact swap amount instead of MaxUint256, causing
-   * "insufficient allowance" errors when the actual swap needs slightly more due to
-   * fees/slippage. Uniswap providers now always use MaxUint256 approvals.
+   * Priority para outras chains same-chain:
+   *   1. Uniswap Trading API
+   *   2. Thirdweb
    */
   private async selectForSameChain(
     supportedProviders: ISwapProvider[],
     request: SwapRequest
   ): Promise<ProviderSelectionResult> {
-    console.log("[RouterDomainService] 🔄 Same-chain swap detected");
-
+    const isBase = request.fromChainId === BASE_CHAIN_ID;
     const errors: string[] = [];
 
-    // Priority 1: Try Uniswap Smart Router first (V2/V3 routing + MaxUint256 approval)
-    // TEMPORARILY DISABLED: Smart Router has V4 subgraph issues causing process crashes
-    // const uniswapSmartRouter = supportedProviders.find((p) => p.name === "uniswap-smart-router");
-    // if (uniswapSmartRouter) {
-    //   console.log("[RouterDomainService] ✅ Attempting Uniswap Smart Router (Priority 1 - V2/V3 + MaxUint256 approval)");
-    //   try {
-    //     const quote = await this.getQuoteWithTimeout(
-    //       uniswapSmartRouter,
-    //       request,
-    //       this.smartRouterQuoteTimeoutMs
-    //     );
-    //     console.log(
-    //       "[RouterDomainService] ✅ Uniswap Smart Router quote successful:",
-    //       quote.estimatedReceiveAmount.toString()
-    //     );
-    //     return { provider: uniswapSmartRouter, quote };
-    //   } catch (error) {
-    //     console.warn(
-    //       "[RouterDomainService] ⚠️ Uniswap Smart Router failed, trying Trading API:",
-    //       (error as Error).message
-    //     );
-    //     errors.push(`smart-router: ${(error as Error).message}`);
-    //     // Continue to fallback
-    //   }
-    // }
+    if (isBase) {
+      console.log(`[🔀 ROUTER] ✅ Base same-chain → Prioridade: Execution Layer (Aerodrome) > Uniswap > Thirdweb`);
 
-    // Priority 2: Try Uniswap Trading API (V3 only + MaxUint256 approval)
-    const uniswapTradingApi = supportedProviders.find(
-      (p) => p.name === "uniswap-trading-api" || p.name === "uniswap"
-    );
-    if (uniswapTradingApi) {
-      console.log("[RouterDomainService] ✅ Attempting Uniswap Trading API (Priority 2 - V3 + MaxUint256 approval)");
-      try {
-        const quote = await uniswapTradingApi.getQuote(request);
-        console.log(
-          "[RouterDomainService] ✅ Uniswap Trading API quote successful:",
-          quote.estimatedReceiveAmount.toString()
-        );
-        return { provider: uniswapTradingApi, quote };
-      } catch (error) {
-        console.warn(
-          "[RouterDomainService] ⚠️ Uniswap Trading API failed, trying Thirdweb:",
-          (error as Error).message
-        );
-        errors.push(`trading-api: ${(error as Error).message}`);
-        // Continue to fallback
+      // Priority 1 — Aerodrome via Execution Layer
+      const aerodrome = supportedProviders.find((p) => p.name === "aerodrome");
+      if (aerodrome) {
+        console.log(`[🔀 ROUTER] 🚀 [P1] Tentando Execution Layer (Aerodrome) — rota nativa Base`);
+        try {
+          const quote = await aerodrome.getQuote(request);
+          console.log(`[🔀 ROUTER] ✅ [P1] Execution Layer (Aerodrome) selecionado — amountOut: ${quote.estimatedReceiveAmount.toString()}`);
+          return { provider: aerodrome, quote };
+        } catch (error) {
+          console.warn(`[🔀 ROUTER] ⚠️ [P1] Execution Layer (Aerodrome) falhou: ${(error as Error).message}`);
+          errors.push(`aerodrome: ${(error as Error).message}`);
+        }
+      } else {
+        console.log(`[🔀 ROUTER] ℹ️ [P1] Aerodrome não suporta este par — tentando Uniswap`);
       }
-    }
 
-    // Priority 3: Try Thirdweb as last resort (exact amount approvals)
-    const thirdweb = supportedProviders.find((p) => p.name === "thirdweb");
-    if (thirdweb) {
-      console.log("[RouterDomainService] ✅ Attempting Thirdweb (Priority 3 - Fallback, exact approvals)");
-      try {
-        const quote = await thirdweb.getQuote(request);
-        console.log(
-          "[RouterDomainService] ✅ Thirdweb quote successful:",
-          quote.estimatedReceiveAmount.toString()
-        );
-        return { provider: thirdweb, quote };
-      } catch (error) {
-        console.warn(
-          "[RouterDomainService] ⚠️ Thirdweb failed:",
-          (error as Error).message
-        );
-        errors.push(`thirdweb: ${(error as Error).message}`);
-        // Continue to fallback
-      }
-    }
-
-    // Priority 4: Try any remaining providers
-    try {
-      return await this.tryFallbackProviders(
-        supportedProviders,
-        request,
-        ["uniswap-smart-router", "uniswap-trading-api", "uniswap", "thirdweb"]
+      // Priority 2 — Uniswap Trading API (fallback para pares sem pool no Aerodrome)
+      const uniswapTradingApi = supportedProviders.find(
+        (p) => p.name === "uniswap-trading-api" || p.name === "uniswap"
       );
-    } catch (fallbackError) {
-      if (fallbackError instanceof Error) {
-        errors.push(`fallback: ${fallbackError.message}`);
+      if (uniswapTradingApi) {
+        console.log(`[🔀 ROUTER] 🦄 [P2] Tentando Uniswap Trading API — fallback para par sem pool Aerodrome`);
+        try {
+          const quote = await uniswapTradingApi.getQuote(request);
+          console.log(`[🔀 ROUTER] ✅ [P2] Uniswap Trading API selecionado — amountOut: ${quote.estimatedReceiveAmount.toString()}`);
+          return { provider: uniswapTradingApi, quote };
+        } catch (error) {
+          console.warn(`[🔀 ROUTER] ⚠️ [P2] Uniswap Trading API falhou: ${(error as Error).message}`);
+          errors.push(`uniswap-trading-api: ${(error as Error).message}`);
+        }
+      }
+
+      // Priority 3 — Thirdweb (último recurso)
+      const thirdweb = supportedProviders.find((p) => p.name === "thirdweb");
+      if (thirdweb) {
+        console.log(`[🔀 ROUTER] 🌐 [P3] Tentando Thirdweb — último recurso para Base`);
+        try {
+          const quote = await thirdweb.getQuote(request);
+          console.log(`[🔀 ROUTER] ✅ [P3] Thirdweb selecionado — amountOut: ${quote.estimatedReceiveAmount.toString()}`);
+          return { provider: thirdweb, quote };
+        } catch (error) {
+          console.warn(`[🔀 ROUTER] ⚠️ [P3] Thirdweb falhou: ${(error as Error).message}`);
+          errors.push(`thirdweb: ${(error as Error).message}`);
+        }
+      }
+    } else {
+      console.log(`[🔀 ROUTER] ✅ Same-chain (chain ${request.fromChainId}) → Prioridade: Uniswap > Thirdweb`);
+
+      // Priority 1 — Uniswap Trading API
+      const uniswapTradingApi = supportedProviders.find(
+        (p) => p.name === "uniswap-trading-api" || p.name === "uniswap"
+      );
+      if (uniswapTradingApi) {
+        console.log(`[🔀 ROUTER] 🦄 [P1] Tentando Uniswap Trading API`);
+        try {
+          const quote = await uniswapTradingApi.getQuote(request);
+          console.log(`[🔀 ROUTER] ✅ [P1] Uniswap Trading API selecionado — amountOut: ${quote.estimatedReceiveAmount.toString()}`);
+          return { provider: uniswapTradingApi, quote };
+        } catch (error) {
+          console.warn(`[🔀 ROUTER] ⚠️ [P1] Uniswap Trading API falhou: ${(error as Error).message}`);
+          errors.push(`uniswap-trading-api: ${(error as Error).message}`);
+        }
+      }
+
+      // Priority 2 — Thirdweb
+      const thirdweb = supportedProviders.find((p) => p.name === "thirdweb");
+      if (thirdweb) {
+        console.log(`[🔀 ROUTER] 🌐 [P2] Tentando Thirdweb`);
+        try {
+          const quote = await thirdweb.getQuote(request);
+          console.log(`[🔀 ROUTER] ✅ [P2] Thirdweb selecionado — amountOut: ${quote.estimatedReceiveAmount.toString()}`);
+          return { provider: thirdweb, quote };
+        } catch (error) {
+          console.warn(`[🔀 ROUTER] ⚠️ [P2] Thirdweb falhou: ${(error as Error).message}`);
+          errors.push(`thirdweb: ${(error as Error).message}`);
+        }
       }
     }
 
-    const detail = errors.length ? `Reasons: ${errors.join("; ")}` : "No providers available";
-    throw new Error(`Same-chain swap failed with all providers. ${detail}`);
+    const detail = errors.length ? `Motivos: ${errors.join("; ")}` : "Nenhum provider disponível";
+    throw new Error(`Same-chain swap falhou em todos os providers. ${detail}`);
   }
 
   /**
-   * Select provider for cross-chain swap
-   *
-   * Priority: Thirdweb > others
+   * Select provider for cross-chain swap.
+   * Priority: Thirdweb (especialista em bridges)
    */
   private async selectForCrossChain(
     supportedProviders: ISwapProvider[],
     request: SwapRequest
   ): Promise<ProviderSelectionResult> {
-    console.log("[RouterDomainService] 🌉 Cross-chain swap detected");
+    console.log(`[🔀 ROUTER] 🌉 Cross-chain (${request.fromChainId} → ${request.toChainId}) → Prioridade: Thirdweb`);
 
-    // Try Thirdweb first (specialized in bridges)
     const thirdweb = supportedProviders.find((p) => p.name === "thirdweb");
     if (thirdweb) {
-      console.log("[RouterDomainService] ✅ Attempting Thirdweb (preferred)");
+      console.log(`[🔀 ROUTER] 🌐 [P1] Tentando Thirdweb — bridge cross-chain`);
       try {
         const quote = await thirdweb.getQuote(request);
-        console.log(
-          "[RouterDomainService] ✅ Thirdweb quote successful:",
-          quote.estimatedReceiveAmount.toString()
-        );
+        console.log(`[🔀 ROUTER] ✅ [P1] Thirdweb selecionado — amountOut: ${quote.estimatedReceiveAmount.toString()}`);
         return { provider: thirdweb, quote };
       } catch (error) {
-        console.warn(
-          "[RouterDomainService] ⚠️ Thirdweb failed, trying fallback:",
-          (error as Error).message
-        );
-        // Continue to fallback
+        console.warn(`[🔀 ROUTER] ⚠️ [P1] Thirdweb falhou: ${(error as Error).message}`);
       }
     }
 
-    // Fallback to other providers
-    return await this.tryFallbackProviders(supportedProviders, request, [
-      "thirdweb",
-    ]);
+    console.log(`[🔀 ROUTER] ⚠️ Thirdweb indisponível — tentando outros providers como fallback`);
+    return await this.tryFallbackProviders(supportedProviders, request, ["thirdweb"]);
   }
 
   /**
@@ -384,11 +364,9 @@ export class RouterDomainService {
   public async selectBestProviderWithoutQuote(
     request: SwapRequest
   ): Promise<ISwapProvider> {
-    console.log(
-      `[RouterDomainService] Selecting provider (no quote) for: ${request.toLogString()}`
-    );
+    const isSameChain = this.isSameChain(request);
+    const isBase = request.fromChainId === BASE_CHAIN_ID;
 
-    // 1. Build route parameters
     const routeParams: RouteParams = {
       fromChainId: request.fromChainId,
       toChainId: request.toChainId,
@@ -396,7 +374,6 @@ export class RouterDomainService {
       toToken: request.toToken,
     };
 
-    // 2. Check which providers support this route
     const supportedProviders = await this.getSupportedProviders(routeParams);
 
     if (supportedProviders.length === 0) {
@@ -405,50 +382,43 @@ export class RouterDomainService {
       );
     }
 
-    // 3. Determine if same-chain or cross-chain
-    const isSameChain = this.isSameChain(request);
-
-    // 4. Return provider based on priority (WITHOUT calling getQuote)
-    if (isSameChain) {
-      // Priority 1: Uniswap Smart Router (V2/V3 + MaxUint256 approval)
-      // TEMPORARILY DISABLED: Smart Router has V4 subgraph issues causing process crashes
-      // const uniswapSmartRouter = supportedProviders.find((p) => p.name === "uniswap-smart-router");
-      // if (uniswapSmartRouter) {
-      //   console.log(`[RouterDomainService] Selected: ${uniswapSmartRouter.name} (Priority 1 - Uniswap V2/V3)`);
-      //   return uniswapSmartRouter;
-      // }
-
-      // Priority 1 (was 2): Uniswap Trading API (V3 + MaxUint256 approval)
-      const uniswapTradingApi = supportedProviders.find(
+    if (isSameChain && isBase) {
+      const aerodrome = supportedProviders.find((p) => p.name === "aerodrome");
+      if (aerodrome) {
+        console.log(`[🔀 ROUTER] [PREPARE] P1 → Execution Layer (Aerodrome) — Base same-chain`);
+        return aerodrome;
+      }
+      const uniswap = supportedProviders.find(
         (p) => p.name === "uniswap-trading-api" || p.name === "uniswap"
       );
-      if (uniswapTradingApi) {
-        console.log(`[RouterDomainService] Selected: ${uniswapTradingApi.name} (Priority 2 - Uniswap V3)`);
-        return uniswapTradingApi;
+      if (uniswap) {
+        console.log(`[🔀 ROUTER] [PREPARE] P2 → Uniswap Trading API — par sem pool Aerodrome`);
+        return uniswap;
       }
-
-      // Priority 3: Thirdweb (fallback only)
-      const thirdweb = supportedProviders.find((p) => p.name === "thirdweb");
-      if (thirdweb) {
-        console.log(`[RouterDomainService] Selected: ${thirdweb.name} (Priority 3 - Fallback)`);
-        return thirdweb;
+    } else if (isSameChain) {
+      const uniswap = supportedProviders.find(
+        (p) => p.name === "uniswap-trading-api" || p.name === "uniswap"
+      );
+      if (uniswap) {
+        console.log(`[🔀 ROUTER] [PREPARE] P1 → Uniswap Trading API — same-chain (chain ${request.fromChainId})`);
+        return uniswap;
       }
-
-      // Fallback to first available
-      console.log(`[RouterDomainService] Selected: ${supportedProviders[0].name} (Fallback)`);
-      return supportedProviders[0];
     } else {
-      // Cross-chain: Prefer Thirdweb
       const thirdweb = supportedProviders.find((p) => p.name === "thirdweb");
       if (thirdweb) {
-        console.log(`[RouterDomainService] Selected: ${thirdweb.name} (Cross-chain)`);
+        console.log(`[🔀 ROUTER] [PREPARE] P1 → Thirdweb — cross-chain`);
         return thirdweb;
       }
-
-      // Fallback
-      console.log(`[RouterDomainService] Selected: ${supportedProviders[0].name} (Fallback)`);
-      return supportedProviders[0];
     }
+
+    const thirdweb = supportedProviders.find((p) => p.name === "thirdweb");
+    if (thirdweb) {
+      console.log(`[🔀 ROUTER] [PREPARE] Fallback → Thirdweb`);
+      return thirdweb;
+    }
+
+    console.log(`[🔀 ROUTER] [PREPARE] Fallback → ${supportedProviders[0].name}`);
+    return supportedProviders[0];
   }
 
   /**

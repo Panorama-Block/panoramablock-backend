@@ -5,6 +5,8 @@ import { SwapRequest, SwapQuote } from "../../domain/entities/swap";
 import { SwapError } from "../../domain/entities/errors";
 import { PreparedSwap } from "../../domain/ports/swap.provider.port";
 
+const BASE_CHAIN_ID = 8453;
+
 const PROVIDER_ALIAS_PRIORITY: Record<string, string[]> = {
   uniswap: ["uniswap-trading-api"],
 };
@@ -78,16 +80,9 @@ export class ProviderSelectorService {
   public async getQuoteWithBestProvider(
     request: SwapRequest
   ): Promise<QuoteWithProvider> {
-    console.log(
-      `[ProviderSelectorService] Getting quote with auto provider selection`
-    );
-
-    // Delegate to router domain service
     const { provider, quote } = await this.router.selectBestProvider(request);
 
-    console.log(
-      `[ProviderSelectorService] ✅ Auto-selected provider: ${provider.name}`
-    );
+    console.log(`[📋 SELECTOR] Quote finalizado — provider escolhido: "${provider.name}"`);
 
     return {
       provider: provider.name,
@@ -181,21 +176,24 @@ export class ProviderSelectorService {
     }
 
     // Case 2: Auto-select best provider with automatic fallback
-    console.log(
-      "[ProviderSelectorService] Auto-selecting provider for prepare"
-    );
-
-    // Try providers in priority order with automatic fallback
-    // Priority: Uniswap first (partnership), then fallback to Thirdweb
-    // NOTE: Smart Router temporarily disabled due to V4 subgraph issues
     const isSameChain = request.fromChainId === request.toChainId;
-    const providerPriority = isSameChain
-      ? ["thirdweb", "uniswap-trading-api"]
-      : ["thirdweb", "uniswap-trading-api"];
+    const isBase = request.fromChainId === BASE_CHAIN_ID;
 
-    console.log(
-      `[ProviderSelectorService] Route mode: ${isSameChain ? 'same-chain' : 'cross-chain'}; candidate priority: ${providerPriority.join(', ')}`
-    );
+    // Prioridade espelha o RouterDomainService:
+    //   Base same-chain  → Execution Layer (aerodrome) > Uniswap > Thirdweb
+    //   Outro same-chain → Uniswap > Thirdweb
+    //   Cross-chain      → Thirdweb > Uniswap
+    let providerPriority: string[];
+    if (isSameChain && isBase) {
+      providerPriority = ["aerodrome", "uniswap-trading-api", "uniswap", "thirdweb"];
+      console.log(`[📋 SELECTOR] [PREPARE] Auto-select — Base same-chain → prioridade: ${providerPriority.join(" > ")}`);
+    } else if (isSameChain) {
+      providerPriority = ["uniswap-trading-api", "uniswap", "thirdweb"];
+      console.log(`[📋 SELECTOR] [PREPARE] Auto-select — same-chain (chain ${request.fromChainId}) → prioridade: ${providerPriority.join(" > ")}`);
+    } else {
+      providerPriority = ["thirdweb", "uniswap-trading-api", "uniswap"];
+      console.log(`[📋 SELECTOR] [PREPARE] Auto-select — cross-chain → prioridade: ${providerPriority.join(" > ")}`);
+    }
 
     const errors: string[] = [];
     let lastSwapError: SwapError | null = null;
@@ -203,10 +201,9 @@ export class ProviderSelectorService {
     for (const providerName of providerPriority) {
       const provider = this.router.getProviderByName(providerName);
       if (!provider) {
-        continue; // Skip if provider not available
+        continue;
       }
 
-      // Check if provider supports the route
       try {
         const supports = await provider.supportsRoute({
           fromChainId: request.fromChainId,
@@ -216,63 +213,32 @@ export class ProviderSelectorService {
         });
 
         if (!supports) {
-          console.log(
-            `[ProviderSelectorService] ${providerName} does not support route, skipping`
-          );
+          console.log(`[📋 SELECTOR] [PREPARE] "${providerName}" não suporta este par — pulando`);
           continue;
         }
       } catch (error) {
-        console.warn(
-          `[ProviderSelectorService] Error checking ${providerName} support:`,
-          (error as Error).message
-        );
+        console.warn(`[📋 SELECTOR] [PREPARE] Erro ao verificar suporte de "${providerName}": ${(error as Error).message}`);
         errors.push(`${providerName}: ${(error as Error).message}`);
-        if (error instanceof SwapError) {
-          lastSwapError = error;
-        }
+        if (error instanceof SwapError) lastSwapError = error;
         continue;
       }
 
-      // Try to prepare swap with this provider
       try {
-        console.log(
-          `[ProviderSelectorService] ✅ Attempting to prepare with ${providerName}`
-        );
+        console.log(`[📋 SELECTOR] [PREPARE] 🚀 Preparando swap com "${providerName}"`);
         const prepared = await provider.prepareSwap(request);
-
-        console.log(
-          `[ProviderSelectorService] ✅ Prepared swap with ${providerName}`
-        );
-
-        return {
-          provider: provider.name,
-          prepared,
-        };
+        console.log(`[📋 SELECTOR] [PREPARE] ✅ Prepare concluído com "${providerName}"`);
+        return { provider: provider.name, prepared };
       } catch (error) {
-        console.warn(
-          `[ProviderSelectorService] ⚠️ ${providerName} failed to prepare, trying next provider:`,
-          (error as Error).message
-        );
+        console.warn(`[📋 SELECTOR] [PREPARE] ⚠️ "${providerName}" falhou no prepare: ${(error as Error).message}`);
         errors.push(`${providerName}: ${(error as Error).message}`);
-        if (error instanceof SwapError) {
-          lastSwapError = error;
-        }
-        // Continue to next provider
+        if (error instanceof SwapError) lastSwapError = error;
       }
     }
 
-    // All providers failed - if we have a SwapError, throw it directly for proper handling
-    if (lastSwapError) {
-      if (!isSameChain && providerPriority[0] === 'thirdweb') {
-        console.warn(
-          '[ProviderSelectorService] Cross-chain prepare exhausted available providers. Thirdweb is the primary cross-chain provider in this stack.'
-        );
-      }
-      throw lastSwapError;
-    }
+    if (lastSwapError) throw lastSwapError;
 
-    const detail = errors.length ? `Reasons: ${errors.join("; ")}` : "No providers available";
-    throw new Error(`Failed to prepare swap with all providers. ${detail}`);
+    const detail = errors.length ? `Motivos: ${errors.join("; ")}` : "Nenhum provider disponível";
+    throw new Error(`Prepare falhou em todos os providers. ${detail}`);
   }
 
   /**

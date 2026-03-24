@@ -157,7 +157,7 @@ grep "executeSwap" /tmp/dca-service.log
 ## 📚 Documentação Completa
 
 - Backend: `./DCA_DOCUMENTATION.md`
-- Frontend: `../telegram/apps/miniapp/src/features/dca/README.md`
+- Frontend: `../../../../telegram/docs/features/dca/README.md`
 
 ---
 

@@ -12,6 +12,7 @@ import { ThirdwebSwapAdapter } from "../adapters/thirdweb.swap.adapter";
 import { ThirdwebProviderAdapter } from "../adapters/thirdweb.provider.adapter";
 import { UniswapTradingApiAdapter } from "../adapters/uniswap.tradingapi.adapter";
 import { UniswapSmartRouterAdapter } from "../adapters/uniswap.smartrouter.adapter";
+import { AerodromeProviderAdapter } from "../adapters/aerodrome.provider.adapter";
 import { ChainProviderAdapter } from "../adapters/chain.provider.adapter";
 import { SwapRepositoryAdapter } from "../adapters/swap.repository.adapter";
 import { SwapController } from "../http/controllers/swap.controller";
@@ -26,6 +27,7 @@ export class DIContainer {
   // Infrastructure - Swap Providers
   private readonly _uniswapTradingApi: UniswapTradingApiAdapter; // Trading API REST (Priority 1)
   private readonly _uniswapSmartRouter: UniswapSmartRouterAdapter; // Smart Order Router SDK (Priority 2 - Fallback)
+  private readonly _aerodromeProvider: AerodromeProviderAdapter; // Aerodrome on Base (Priority 3)
   private readonly _thirdwebProvider: ThirdwebProviderAdapter;
   private readonly _thirdwebSwapAdapter: ThirdwebSwapAdapter; // Legacy adapter for backwards compatibility
   private readonly _chainProviderAdapter: ChainProviderAdapter;
@@ -52,17 +54,19 @@ export class DIContainer {
     // Initialize infrastructure adapters
     this._uniswapTradingApi = new UniswapTradingApiAdapter(); // Priority 1: Trading API REST
     this._uniswapSmartRouter = new UniswapSmartRouterAdapter(); // Priority 2: Smart Router SDK (Fallback)
+    this._aerodromeProvider = new AerodromeProviderAdapter(); // Priority 3: Aerodrome on Base
     this._thirdwebProvider = new ThirdwebProviderAdapter();
     this._thirdwebSwapAdapter = new ThirdwebSwapAdapter(); // Legacy
     this._chainProviderAdapter = new ChainProviderAdapter();
     this._swapRepositoryAdapter = new SwapRepositoryAdapter();
 
     // Build provider registry for new multi-provider system
-    // Priority order: Trading API REST > Smart Router SDK > Thirdweb
+    // Priority order: Trading API REST > Smart Router SDK > Aerodrome (Base) > Thirdweb
     const providerMap = new Map<string, ISwapProvider>();
     providerMap.set(this._uniswapTradingApi.name, this._uniswapTradingApi);   // Priority 1
     providerMap.set(this._uniswapSmartRouter.name, this._uniswapSmartRouter); // Priority 2
-    providerMap.set(this._thirdwebProvider.name, this._thirdwebProvider);      // Priority 3
+    providerMap.set(this._aerodromeProvider.name, this._aerodromeProvider);    // Priority 3 (Base only)
+    providerMap.set(this._thirdwebProvider.name, this._thirdwebProvider);      // Priority 4
 
     // Initialize domain services
     this._routerDomainService = new RouterDomainService(providerMap);

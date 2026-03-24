@@ -5,14 +5,14 @@ Sistema de Dollar Cost Averaging (DCA) automatizado com Account Abstraction (ERC
 ## 📚 Documentação
 
 ### Quick Start
-- **[QUICKSTART.md](./QUICKSTART.md)** - Guia rápido de 5 minutos para começar
+- **[QUICKSTART.md](../docs/services/dca/QUICKSTART.md)** - Guia rápido de 5 minutos para começar
 
 ### Documentação Completa
-- **[DCA_DOCUMENTATION.md](./DCA_DOCUMENTATION.md)** - Documentação técnica completa do sistema
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Diagramas e fluxos da arquitetura
+- **[DCA_DOCUMENTATION.md](../docs/services/dca/DCA_DOCUMENTATION.md)** - Documentação técnica completa do sistema
+- **[ARCHITECTURE.md](../docs/services/dca/ARCHITECTURE.md)** - Diagramas e fluxos da arquitetura
 
 ### Frontend
-- **[Frontend README](../../../telegram/apps/miniapp/src/features/dca/README.md)** - Guia de integração frontend
+- **[Frontend README](../../telegram/docs/features/dca/README.md)** - Guia de integração frontend
 
 ## ⚡ Início Rápido
 

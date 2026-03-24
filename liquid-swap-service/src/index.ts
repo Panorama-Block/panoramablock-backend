@@ -81,6 +81,10 @@ try {
   app.use(expressLib.urlencoded({ extended: true, limit: "10mb" }));
   app.use(requestContextMiddleware);
 
+  // Per-user request serialization — prevents RPC burst from same wallet
+  const { serializeByUser } = require("./middleware/serialize-by-user");
+  app.use(serializeByUser);
+
   // Request logging (opcional via DEBUG)
   app.use((req: Request, _res: Response, next: NextFunction) => {
     if (process.env.DEBUG === "true") {
@@ -101,16 +105,16 @@ try {
     console.log("[Liquid Swap Service] 🔍 Debug endpoint enabled: /debug/compare-providers");
   }
 
+  // /swap/quote is a read-only price-fetch — no auth required (smartAccountAddress in body is sufficient)
+  // /swap/tx and /swap/status require auth to prevent abuse and tie history to the user
+  const di = DIContainer.getInstance();
+  app.post("/swap/quote", di.swapController.getQuote);
   app.use("/swap", verifyJwtMiddleware, swapRouter);
 
   // Back-compat aliases (some older clients call these without the /swap prefix).
-  // Keep JWT protection consistent with /swap/* routes.
-  {
-    const di = DIContainer.getInstance();
-    app.post("/quote", verifyJwtMiddleware, di.swapController.getQuote);
-    app.post("/tx", verifyJwtMiddleware, di.swapController.getPreparedTx);
-    app.post("/prepare", verifyJwtMiddleware, di.swapController.getPreparedTx);
-  }
+  app.post("/quote", di.swapController.getQuote);          // no auth — read-only
+  app.post("/tx", verifyJwtMiddleware, di.swapController.getPreparedTx);
+  app.post("/prepare", verifyJwtMiddleware, di.swapController.getPreparedTx);
 
   // Health check
   app.get("/health", (_req: Request, res: Response) => {

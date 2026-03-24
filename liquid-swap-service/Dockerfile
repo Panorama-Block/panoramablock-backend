@@ -6,11 +6,14 @@ WORKDIR /app
 RUN apk add --no-cache python3 py3-setuptools make g++
 
 # Copy package files
-COPY package*.json ./
-RUN npm install
+COPY liquid-swap-service/package.json ./package.json
+RUN npm install --legacy-peer-deps --force
+
+# Copy shared directory (token-registry.json is pre-staged by CI into shared/)
+COPY shared ./shared
 
 # Copy source code
-COPY . .
+COPY liquid-swap-service/ .
 
 # Build TypeScript
 RUN npm run build
@@ -23,14 +26,13 @@ FROM node:18-alpine AS runner
 
 WORKDIR /app
 
-RUN mkdir -p /app/shared
-
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/shared ./shared
 
 # Expose port
-EXPOSE 3003
+EXPOSE 3002
 
 # Run the application
 CMD ["npm", "start"]

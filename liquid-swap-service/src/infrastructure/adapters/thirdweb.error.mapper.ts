@@ -124,6 +124,15 @@ function isNetworkError(error: AxiosError): boolean {
 }
 
 /**
+ * Check if error is a ThirdWeb API key / secret key epoch expiry error.
+ * This happens when THIRDWEB_SECRET_KEY on the backend has expired.
+ */
+function isEpochExpiredError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return lower.includes('token expired') && lower.includes('epoch');
+}
+
+/**
  * Check if error is an invalid gas parameters error (EIP-1559)
  * This happens when maxFeePerGas < maxPriorityFeePerGas
  */
@@ -163,6 +172,16 @@ export function mapThirdwebError(error: unknown, operation: string): SwapError {
     );
   }
 
+  // ThirdWeb API key / secret key expired — do not leak the raw epoch message
+  if (isEpochExpiredError(error.message || '')) {
+    console.error(`[ThirdwebErrorMapper] ⚠️ THIRDWEB_SECRET_KEY has expired. Renew it at https://thirdweb.com/dashboard/settings/api-keys`);
+    return new SwapError(
+      SwapErrorCode.SERVICE_UNAVAILABLE,
+      'Quote service is temporarily unavailable. Please try again later.',
+      { operation, hint: 'THIRDWEB_SECRET_KEY expired — renew at ThirdWeb dashboard' }
+    );
+  }
+
   // Check for invalid gas parameters error (can come from wallet/transaction validation)
   if (isInvalidGasError(error.message || '')) {
     return new SwapError(
@@ -194,6 +213,16 @@ export function mapThirdwebError(error: unknown, operation: string): SwapError {
 
   // Extract error details from response
   const { code, message, correlationId, status } = extractErrorDetails(axiosError);
+
+  // ThirdWeb API key expired — can also arrive via HTTP response body
+  if (isEpochExpiredError(message || '')) {
+    console.error(`[ThirdwebErrorMapper] ⚠️ THIRDWEB_SECRET_KEY has expired (HTTP ${status}). Renew it at https://thirdweb.com/dashboard/settings/api-keys`);
+    return new SwapError(
+      SwapErrorCode.SERVICE_UNAVAILABLE,
+      'Quote service is temporarily unavailable. Please try again later.',
+      { operation, httpStatus: status, hint: 'THIRDWEB_SECRET_KEY expired' }
+    );
+  }
 
   // Log for debugging
   console.error(`[ThirdwebErrorMapper] Error in ${operation}:`, {

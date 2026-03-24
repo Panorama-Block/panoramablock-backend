@@ -13,8 +13,6 @@
   },
   "dependencies": {
     "@thirdweb-dev/engine": "^3.2.1",
-    "@uniswap/sdk-core": "^5.9.0",
-    "@uniswap/smart-order-router": "^4.22.21",
     "chai": "^4.3.10",
     "axios": "^1.12.2",
     "cors": "^2.8.5",

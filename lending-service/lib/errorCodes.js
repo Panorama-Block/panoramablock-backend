@@ -28,6 +28,7 @@ const ERROR_CODES = Object.freeze({
 
   // Network
   RPC_ERROR: 'RPC_ERROR',
+  RPC_UNAVAILABLE: 'RPC_UNAVAILABLE',
   NETWORK_ERROR: 'NETWORK_ERROR',
   SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
   TIMEOUT: 'TIMEOUT',
@@ -79,4 +80,44 @@ function sendError(res, status, code, message, details) {
   return res.status(status).json(body);
 }
 
-module.exports = { ERROR_CODES, errorResponse, sendError };
+const RPC_ERROR_PATTERNS = [
+  /timeout/i,
+  /ECONNREFUSED/i,
+  /ENOTFOUND/i,
+  /missing response/i,
+  /could not detect network/i,
+  /bad response/i,
+  /server error/i,
+  /rate.?limit/i,
+  /too many requests/i,
+  /circuit breaker/i,
+  /NETWORK_ERROR/i,
+  /SERVER_ERROR/i,
+  /TIMEOUT/i,
+];
+
+/**
+ * Check if an error is an RPC/provider failure.
+ */
+function isRpcError(err) {
+  const msg = String(err?.message || err || '');
+  return RPC_ERROR_PATTERNS.some((pattern) => pattern.test(msg));
+}
+
+/**
+ * Send a standardized 503 response for RPC failures.
+ * Use this in catch blocks where RPC calls may fail.
+ */
+function sendRpcUnavailable(res, err) {
+  console.error('[RPC_UNAVAILABLE]', String(err?.message || err).slice(0, 200));
+  return res.status(503).set({ 'Retry-After': '5' }).json({
+    success: false,
+    error: {
+      code: ERROR_CODES.RPC_UNAVAILABLE,
+      message: 'Blockchain node temporarily unavailable. Please retry.',
+      retryAfter: 5,
+    },
+  });
+}
+
+module.exports = { ERROR_CODES, errorResponse, sendError, isRpcError, sendRpcUnavailable };

@@ -30,15 +30,21 @@ export interface SwapResult {
  * Swap Service
  * Handles token swap execution with security features
  */
+// Chains supported by Uniswap V3 (Smart Account DCA)
+const SUPPORTED_CHAINS = new Set([1, 5, 137, 42161, 10, 8453]);
+
 export class SwapService {
   private quoteService = new QuoteService();
-  private circuitBreaker = CircuitBreakerManager.getBreaker(CIRCUIT_BREAKERS.UNISWAP_ROUTER, {
-    failureThreshold: 5,
-    successThreshold: 3,
-    timeout: 60000, // 1 minute
-    monitoringWindow: 300000, // 5 minutes
-  });
   private auditLogger = AuditLogger.getInstance();
+
+  private getCircuitBreaker(chainId: number) {
+    return CircuitBreakerManager.getBreaker(`${CIRCUIT_BREAKERS.UNISWAP_ROUTER}-${chainId}`, {
+      failureThreshold: 5,
+      successThreshold: 3,
+      timeout: 60000,
+      monitoringWindow: 300000,
+    });
+  }
 
   /**
    * Execute a token swap
@@ -65,8 +71,16 @@ export class SwapService {
       },
     });
 
-    // Use circuit breaker to protect against repeated failures
-    return this.circuitBreaker.execute(async () => {
+    // Validate strategy data before hitting circuit breaker
+    if (params.fromToken.toLowerCase() === params.toToken.toLowerCase()) {
+      throw new Error(`Invalid strategy: fromToken and toToken are the same (${params.fromToken})`);
+    }
+    if (!SUPPORTED_CHAINS.has(params.fromChainId)) {
+      throw new Error(`Chain ${params.fromChainId} is not supported by Uniswap V3 smart account DCA`);
+    }
+
+    // Use per-chain circuit breaker so one chain's failures don't block others
+    return this.getCircuitBreaker(params.fromChainId).execute(async () => {
       try {
         // Import Thirdweb functions
         const { createThirdwebClient, getContract } = await import('thirdweb');
@@ -319,7 +333,17 @@ export class SwapService {
           },
         });
 
-        throw new Error(`Swap execution failed: ${error.message}`);
+        const wrappedError = new Error(`Swap execution failed: ${error.message}`);
+
+        // Insufficient funds is a user-data problem, not a service failure.
+        // Re-throw as a non-circuit-breaker error so it doesn't open the breaker
+        // and block other strategies on the same chain.
+        if (error.message?.includes('insufficient funds')) {
+          (wrappedError as any).skipCircuitBreaker = true;
+          throw wrappedError;
+        }
+
+        throw wrappedError;
       }
     });
   }

@@ -15,7 +15,7 @@ The service now supports **multiple swap providers** with automatic intelligent 
 - 📊 Provider information exposed to frontend
 - 🎯 20/20 comprehensive unit tests passing
 
-📖 **[Full Multi-Provider Documentation →](./MULTI_PROVIDER_SYSTEM.md)**
+📖 **[Full Multi-Provider Documentation →](../docs/services/liquid-swap/MULTI_PROVIDER_SYSTEM.md)**
 
 ## 🏗️ Architecture
 

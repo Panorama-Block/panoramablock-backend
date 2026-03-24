@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { DatabaseService } from './services/database.service';
 import { dcaRoutes } from './routes/dca.routes';
 import { createTransactionRoutes } from './routes/transaction.routes';
+import { vaultDcaRoutes } from './routes/vault.dca.routes';
 import { startDCAExecutor } from './jobs/dca.executor';
 import { AuditLogger } from './services/auditLog.service';
 import {
@@ -21,7 +22,13 @@ dotenv.config();
 const app = express();
 const PORT = process.env.DCA_PORT || process.env.PORT || 3003;
 
-// Security middleware (applied first)
+// CORS must be first — handles OPTIONS preflight before any other middleware
+app.use(cors({
+  origin: '*',
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-telegram-init-data', 'x-dev-user-id'],
+}));
+
+// Security middleware
 app.use(securityLogger);
 app.use(removeSensitiveHeaders);
 app.use(forceHTTPS);
@@ -30,7 +37,6 @@ app.use(validateRequestSize(2 * 1024 * 1024)); // 2MB max request size
 
 // Standard middleware
 app.use(express.json());
-app.use(cors());
 
 // Environment logging
 console.log('\n💰 [DCA SERVICE] Environment Variables:');
@@ -112,6 +118,7 @@ async function initializeDatabase() {
 
     // Register routes
     app.use('/dca', dcaRoutes());
+    app.use('/dca/vault', vaultDcaRoutes());
     app.use('/transaction', createTransactionRoutes());
     console.log('[DCA Service] ✅ Routes registered');
 

@@ -1,0 +1,6 @@
+{
+  "name": "github-main-panoramablock-backend",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:Panorama-Block/panoramablock-backend:ref:refs/heads/main",
+  "audiences": ["api://AzureADTokenExchange"]
+}

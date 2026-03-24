@@ -12,6 +12,8 @@ const validationRoutes = require('./routes/validationRoutes');
 const validationSwapRoutes = require('./routes/validationSwapRoutes');
 const benqiRoutes = require('./routes/benqiRoutes');
 const benqiValidationRoutes = require('./routes/benqiValidationRoutes');
+// Execution layer proxy — routes AVAX operations to the execution layer service
+const executionLayerRoutes = require('./routes/executionLayerRoutes');
 
 // Importa configurações
 const { NETWORKS, RATE_LIMIT, SECURITY, VALIDATION } = require('./config/constants');
@@ -19,7 +21,7 @@ const { ERROR_CODES, sendError } = require('./lib/errorCodes');
 const { getAllBreakerStatuses } = require('./lib/circuitBreaker');
 
 const app = express();
-const port = process.env.PORT || 3006;
+const port = process.env.PORT || 3007;
 app.set('trust proxy', 1);
 
 // Middleware de segurança
@@ -85,6 +87,10 @@ const globalRateLimiter = rateLimit({
 });
 
 app.use(globalRateLimiter);
+
+// Per-user request serialization — prevents RPC burst from same wallet
+const { serializeByUser } = require('./middleware/serializeByUser');
+app.use(serializeByUser);
 
 // Middleware de validação de rede
 app.use((req, res, next) => {
@@ -165,8 +171,8 @@ app.get('/info', (req, res) => {
 // Rota de status da rede
 app.get('/network/status', async (req, res) => {
   try {
-    const { ethers } = require('ethers');
-    const provider = new ethers.JsonRpcProvider(NETWORKS.AVALANCHE.rpcUrl);
+    const { createAvalancheProvider } = require('./lib/provider');
+    const provider = createAvalancheProvider();
     
     const [blockNumber, gasPrice, network] = await Promise.all([
       provider.getBlockNumber(),
@@ -216,9 +222,14 @@ app.get('/config', (req, res) => {
 });
 
 // Registra as rotas
+// Execution layer proxy takes priority over legacy routes
+// (benqi/markets, benqi/account, benqi-validation/*, liquid-staking/*)
+app.use('/', executionLayerRoutes);
+
 app.use('/dex', traderJoeRoutes);
 app.use('/validation', validationRoutes);
 app.use('/validation-swap', validationSwapRoutes);
+// Legacy benqi routes remain as fallback if execution layer is down
 app.use('/benqi', benqiRoutes);
 app.use('/benqi-validation', benqiValidationRoutes);
 

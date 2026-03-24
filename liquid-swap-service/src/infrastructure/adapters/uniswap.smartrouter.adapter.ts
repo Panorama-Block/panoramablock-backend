@@ -1,172 +1,27 @@
 /**
- * Uniswap Smart Order Router Adapter
+ * Uniswap Smart Order Router Adapter — DISABLED
  *
- * Uses Uniswap's official Smart Order Router (Auto Router V2) for optimal routing.
- * This adapter searches for the best swap route across Uniswap V2 and V3 pools,
- * considering gas costs and split routes.
+ * The @uniswap/smart-order-router package was removed to reduce Docker image size
+ * and avoid OOM failures during CI builds. This stub always returns unsupported
+ * so the system falls through to the next provider (Thirdweb).
  *
- * Benefits over Trading API v1:
- * - Direct on-chain liquidity access (no 404 "No quotes available" errors)
- * - Auto Router V2 optimization across V2 and V3
- * - No rate limits (uses RPC provider)
- * - Better price discovery
- *
- * @see https://github.com/Uniswap/smart-order-router
+ * The Trading API adapter (uniswap-trading-api) covers the same use cases when
+ * a UNISWAP_TRADING_API_KEY is configured.
  */
 
-import { AlphaRouter, SwapType } from '@uniswap/smart-order-router';
-import { Token, CurrencyAmount, TradeType, Percent } from '@uniswap/sdk-core';
-import { BigNumber, ethers } from 'ethers';
 import { ISwapProvider, RouteParams, PreparedSwap } from '../../domain/ports/swap.provider.port';
 import { SwapQuote, SwapRequest, TransactionStatus } from '../../domain/entities/swap';
-import { NATIVE_TOKEN_ADDRESS } from 'thirdweb';
-import {
-  listSupportedChainsForProvider,
-  getNativeMetadata,
-  getNativeWrappedToken,
-  resolveToken,
-} from '../../config/tokens/registry';
-
-interface ChainConfig {
-  chainId: number;
-  nativeToken: {
-    symbol: string;
-    decimals: number;
-    name: string;
-  };
-  wrappedNativeToken: {
-    address: string;
-    symbol: string;
-    decimals: number;
-    name: string;
-  };
-}
-
-const CHAIN_CONFIGS: Record<number, ChainConfig> = Object.fromEntries(
-  listSupportedChainsForProvider('uniswap').map((chainId) => {
-    const native = getNativeMetadata(chainId);
-    const wrapped = getNativeWrappedToken(chainId);
-    return [
-      chainId,
-      {
-        chainId,
-        nativeToken: {
-          symbol: native.symbol,
-          decimals: native.decimals,
-          name: native.name,
-        },
-        wrappedNativeToken: {
-          address: wrapped.address,
-          symbol: wrapped.symbol,
-          decimals: wrapped.decimals,
-          name: wrapped.name,
-        },
-      },
-    ];
-  })
-);
 
 export class UniswapSmartRouterAdapter implements ISwapProvider {
   public readonly name = 'uniswap-smart-router';
-  private routers: Map<number, AlphaRouter> = new Map();
-  private providers: Map<number, ethers.providers.JsonRpcProvider> = new Map();
-  private supportedChains: number[];
-  private tokenCache: Map<string, Token>;
-  private readonly rpcTimeoutMs: number;
-  private readonly gasBufferBps = 12000; // +20% buffer
-  private readonly slippageBps: number; // Default slippage in basis points (e.g., 300 = 3%)
 
   constructor() {
-    this.supportedChains = Object.keys(CHAIN_CONFIGS).map(Number);
-    this.tokenCache = new Map();
-    const rawTimeout = process.env.SMART_ROUTER_RPC_TIMEOUT_MS;
-    const parsedTimeout = rawTimeout ? Number(rawTimeout) : undefined;
-    this.rpcTimeoutMs = parsedTimeout && parsedTimeout > 0 ? parsedTimeout : 10000;
-
-    // Configurable slippage tolerance - default to 10% (1000 bps) to avoid V2_TOO_LITTLE_RECEIVED errors
-    // High default is needed because MetaMask simulation happens with different block state
-    const rawSlippage = process.env.UNISWAP_SLIPPAGE_BPS;
-    const parsedSlippage = rawSlippage ? Number(rawSlippage) : undefined;
-    this.slippageBps = parsedSlippage && parsedSlippage > 0 ? parsedSlippage : 1000; // 10% default for safety
-
-    this.initializeRouters();
-    console.log(`[${this.name}] Initialized for chains: ${this.supportedChains.join(', ')}`);
-    console.log(`[${this.name}] Slippage tolerance: ${this.slippageBps / 100}% (${this.slippageBps} bps)`);
+    console.log(`[${this.name}] Smart Order Router disabled — use uniswap-trading-api or thirdweb`);
   }
 
-  /**
-   * Initialize AlphaRouter instances for each supported chain
-   */
-  private initializeRouters(): void {
-    for (const chainId of this.supportedChains) {
-      try {
-        const rpcUrl = this.getRpcUrl(chainId);
-        if (!rpcUrl) {
-          console.warn(`[${this.name}] No RPC URL for chain ${chainId}, skipping`);
-          continue;
-        }
-
-        // Use StaticJsonRpcProvider to avoid async network detection issues
-        // StaticJsonRpcProvider requires explicit network and skips detection
-        const network = {
-          name: `chain-${chainId}`,
-          chainId: chainId
-        };
-        const provider = new ethers.providers.StaticJsonRpcProvider(
-          { url: rpcUrl, timeout: this.rpcTimeoutMs },
-          network
-        );
-
-        const router = new AlphaRouter({ chainId, provider });
-
-        this.providers.set(chainId, provider);
-        this.routers.set(chainId, router);
-
-        console.log(`[${this.name}] ✅ Router initialized for chain ${chainId}`);
-      } catch (error) {
-        console.error(`[${this.name}] ❌ Failed to initialize router for chain ${chainId}:`, (error as Error).message);
-      }
-    }
+  async supportsRoute(_params: RouteParams): Promise<boolean> {
+    return false;
   }
-
-  /**
-   * Get RPC URL for a chain ID
-   */
-  private getRpcUrl(chainId: number): string | undefined {
-    const pick = (...candidates: Array<string | undefined>) =>
-      candidates.find((value) => Boolean(value && value.trim().length > 0));
-
-    const rpcMap: Record<number, string | undefined> = {
-      1: pick(process.env.RPC_URL_1, process.env.ETHEREUM_RPC_URL, 'https://eth.llamarpc.com'),
-      10: pick(process.env.RPC_URL_10, process.env.OPTIMISM_RPC_URL, 'https://optimism.llamarpc.com'),
-      137: pick(process.env.RPC_URL_137, process.env.POLYGON_RPC_URL, 'https://polygon.llamarpc.com'),
-      8453: pick(process.env.RPC_URL_8453, process.env.BASE_RPC_URL, 'https://base.llamarpc.com'),
-      42161: pick(process.env.RPC_URL_42161, process.env.ARBITRUM_RPC_URL, 'https://arb1.arbitrum.io/rpc'),
-      43114: pick(process.env.RPC_URL_43114, process.env.AVALANCHE_RPC_URL, 'https://api.avax.network/ext/bc/C/rpc'),
-      56: pick(process.env.RPC_URL_56, process.env.BSC_RPC_URL, 'https://bsc-dataseed.binance.org'),
-      42220: pick(process.env.RPC_URL_42220, process.env.CELO_RPC_URL, 'https://forno.celo.org'),
-      81457: pick(process.env.RPC_URL_81457, process.env.BLAST_RPC_URL, 'https://rpc.blast.io'),
-      7777777: pick(process.env.RPC_URL_7777777, process.env.ZORA_RPC_URL, 'https://rpc.zora.energy'),
-    };
-
-    const rpc = rpcMap[chainId];
-    if (!rpc) {
-      console.warn(`[${this.name}] No RPC URL configured for chain ${chainId}`);
-    }
-    return rpc;
-  }
-
-  /**
-   * Check if this provider supports a given swap route
-   * Smart Router only supports same-chain swaps
-   */
-  async supportsRoute(params: RouteParams): Promise<boolean> {
-    const { fromChainId, toChainId } = params;
-
-    // Only supports same-chain swaps
-    if (fromChainId !== toChainId) {
-      return false;
-    }
 
     // Check if chain is supported
     if (!this.supportedChains.includes(fromChainId)) {

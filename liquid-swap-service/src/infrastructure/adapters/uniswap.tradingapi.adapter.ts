@@ -258,12 +258,15 @@ export class UniswapTradingApiAdapter implements ISwapProvider {
    * Uniswap Trading API only supports same-chain swaps
    */
   async supportsRoute(params: RouteParams): Promise<boolean> {
-    // Only same-chain
+    // Se não tiver API key configurada, nunca anunciar suporte — evita 401 no fallback
+    if (!this.config.apiKey) {
+      return false;
+    }
+
     if (params.fromChainId !== params.toChainId) {
       return false;
     }
 
-    // Check if chain is supported
     return this.supportedChains.includes(params.fromChainId);
   }
 

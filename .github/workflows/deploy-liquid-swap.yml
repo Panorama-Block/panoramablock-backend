@@ -52,16 +52,11 @@ jobs:
           OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
           echo "image=ghcr.io/${OWNER_LOWER}/liquid-swap:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare token registry
-        run: |
-          mkdir -p liquid-swap-service/shared
-          cp shared/token-registry.json liquid-swap-service/shared/token-registry.json
-
       - name: Build and push liquid-swap image
         env:
           IMAGE: ${{ steps.image.outputs.image }}
         run: |
-          docker build -t "$IMAGE" ./liquid-swap-service
+          docker build -t "$IMAGE" -f liquid-swap-service/Dockerfile .
           docker push "$IMAGE"
 
       - name: Authorize liquid-swap container app
@@ -73,11 +68,22 @@ jobs:
             --username ${{ secrets.GHCR_USERNAME }} \
             --password ${{ secrets.GHCR_PASSWORD }}
 
+      - name: Resolve execution-service FQDN
+        id: exec_fqdn
+        run: |
+          FQDN=$(az containerapp show \
+            --name execution-service \
+            --resource-group $RG \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "url=https://${FQDN}" >> "$GITHUB_OUTPUT"
+
       - name: Deploy liquid-swap
         env:
           IMAGE: ${{ steps.image.outputs.image }}
+          EXEC_URL: ${{ steps.exec_fqdn.outputs.url }}
         run: |
           az containerapp update \
             --name liquid-swap \
             --resource-group $RG \
-            --image "$IMAGE"
+            --image "$IMAGE" \
+            --set-env-vars EXECUTION_LAYER_URL="$EXEC_URL"
