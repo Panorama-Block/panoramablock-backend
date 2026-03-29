@@ -1,0 +1,22 @@
+name: Deploy Diagram Service
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "diagram-service/**"
+      - "deploy/azure-vm/**"
+      - ".github/workflows/deploy-diagram-service.yml"
+      - ".github/workflows/deploy-vm-service.yml"
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-vm-service.yml
+    with:
+      service_name: diagram-service
+      compose_service: diagram_service
+      docker_context: ./diagram-service
+      dockerfile: ./diagram-service/Dockerfile
+    secrets: inherit
