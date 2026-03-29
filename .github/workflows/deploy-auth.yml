@@ -2,72 +2,21 @@ name: Deploy Auth Service
 
 on:
   workflow_dispatch:
-
-permissions:
-  id-token: write
-  contents: read
-
-env:
-  RG: Core-Deploy
-  IMAGE_TAG: ${{ github.sha }}
+  push:
+    branches:
+      - main
+    paths:
+      - "auth-service/**"
+      - "deploy/azure-vm/**"
+      - ".github/workflows/deploy-auth.yml"
+      - ".github/workflows/deploy-vm-service.yml"
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-      packages: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Azure login (OIDC)
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Enable Container Apps extension
-        run: az extension add --name containerapp --upgrade
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ secrets.GHCR_USERNAME }}
-          password: ${{ secrets.GHCR_PASSWORD }}
-
-      - name: Compute auth image
-        id: image
-        run: |
-          OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
-          echo "image=ghcr.io/${OWNER_LOWER}/auth-service:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push auth-service image
-        env:
-          IMAGE: ${{ steps.image.outputs.image }}
-        run: |
-          docker build -t "$IMAGE" ./auth-service
-          docker push "$IMAGE"
-
-      - name: Authorize container app to pull from GHCR
-        env:
-          IMAGE: ${{ steps.image.outputs.image }}
-        run: |
-          az containerapp registry set \
-            --name auth-service \
-            --resource-group $RG \
-            --server ghcr.io \
-            --username ${{ secrets.GHCR_USERNAME }} \
-            --password ${{ secrets.GHCR_PASSWORD }}
-
-      - name: Deploy auth-service
-        env:
-          IMAGE: ${{ steps.image.outputs.image }}
-        run: |
-          az containerapp update \
-            --name auth-service \
-            --resource-group $RG \
-            --image "$IMAGE"
+    uses: ./.github/workflows/deploy-vm-service.yml
+    with:
+      service_name: auth-service
+      compose_service: auth_service
+      docker_context: ./auth-service
+      dockerfile: ./auth-service/Dockerfile
+    secrets: inherit

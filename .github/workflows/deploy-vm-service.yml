@@ -1,7 +1,20 @@
-name: Deploy Full Backend To Azure VM
+name: Deploy Service To Azure VM
 
 on:
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      service_name:
+        required: true
+        type: string
+      compose_service:
+        required: true
+        type: string
+      docker_context:
+        required: true
+        type: string
+      dockerfile:
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -15,33 +28,8 @@ env:
   KEY_VAULT_NAME: ${{ secrets.AZURE_KEY_VAULT_NAME }}
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: auth-service
-            context: ./auth-service
-            dockerfile: ./auth-service/Dockerfile
-          - name: bridge-service
-            context: ./bridge-service
-            dockerfile: ./bridge-service/Dockerfile
-          - name: dca-service
-            context: ./dca-service
-            dockerfile: ./dca-service/Dockerfile
-          - name: diagram-service
-            context: ./diagram-service
-            dockerfile: ./diagram-service/Dockerfile
-          - name: lending-service
-            context: ./lending-service
-            dockerfile: ./lending-service/Dockerfile
-          - name: lido-service
-            context: ./lido-service
-            dockerfile: ./lido-service/Dockerfile
-          - name: liquid-swap
-            context: .
-            dockerfile: ./liquid-swap-service/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -55,19 +43,13 @@ jobs:
         id: image
         run: |
           OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
-          echo "image=${GHCR_REGISTRY}/${OWNER_LOWER}/${{ matrix.name }}:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "image=${GHCR_REGISTRY}/${OWNER_LOWER}/${{ inputs.service_name }}:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
           echo "namespace=${OWNER_LOWER}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push
+      - name: Build and push image
         run: |
-          docker build -t "${{ steps.image.outputs.image }}" -f "${{ matrix.dockerfile }}" "${{ matrix.context }}"
+          docker build -t "${{ steps.image.outputs.image }}" -f "${{ inputs.dockerfile }}" "${{ inputs.docker_context }}"
           docker push "${{ steps.image.outputs.image }}"
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v4
 
       - name: Azure login with OIDC
         uses: azure/login@v2
@@ -75,12 +57,6 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Compute shared namespace
-        id: meta
-        run: |
-          OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
-          echo "namespace=${OWNER_LOWER}" >> "$GITHUB_OUTPUT"
 
       - name: Render runtime env from Key Vault
         run: |
@@ -94,11 +70,11 @@ jobs:
           APP_DOMAIN=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name app-domain --query value -o tsv)
           LETSENCRYPT_EMAIL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name letsencrypt-email --query value -o tsv)
           GHCR_REGISTRY=${GHCR_REGISTRY}
-          GHCR_NAMESPACE=${{ steps.meta.outputs.namespace }}
+          GHCR_NAMESPACE=${{ steps.image.outputs.namespace }}
           GHCR_USERNAME=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name ghcr-username --query value -o tsv)
           GHCR_PASSWORD=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name ghcr-password --query value -o tsv)
           IMAGE_TAG=${IMAGE_TAG}
-          EXECUTION_SERVICE_IMAGE=${GHCR_REGISTRY}/${{ steps.meta.outputs.namespace }}/execution-service:latest
+          EXECUTION_SERVICE_IMAGE=${GHCR_REGISTRY}/${{ steps.image.outputs.namespace }}/execution-service:latest
           NODE_ENV=production
           LOG_LEVEL=info
           POSTGRES_HOST=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-host --query value -o tsv)
@@ -154,7 +130,7 @@ jobs:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
-          source: ".deploy-tmp/.env.production,.deploy-tmp/docker-compose.yml,.deploy-tmp/Caddyfile,.deploy-tmp/shared,.deploy-tmp/scripts"
+          source: ".deploy-tmp/*"
           target: "${{ env.DEPLOY_PATH }}"
           strip_components: 1
 
@@ -176,7 +152,7 @@ jobs:
               "$POSTGRES_ADMIN_PASSWORD" \
               panorama_core panorama_dca tac_service panorama_lido
 
-      - name: Pull latest images and restart stack
+      - name: Pull latest image and restart target service
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VM_HOST }}
@@ -185,4 +161,4 @@ jobs:
           script: |
             cd ${{ env.DEPLOY_PATH }}
             chmod +x ./scripts/deploy.sh
-            APP_DIR=/opt/panorama ./scripts/deploy.sh
+            SERVICES="${{ inputs.compose_service }}" APP_DIR=/opt/panorama ./scripts/deploy.sh
