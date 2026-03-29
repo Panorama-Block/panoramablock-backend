@@ -2,12 +2,6 @@ name: Deploy Bridge Service
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'bridge-service/**'
-      - '.github/workflows/deploy-bridge.yml'
 
 permissions:
   id-token: write

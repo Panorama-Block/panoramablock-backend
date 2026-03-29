@@ -85,4 +85,55 @@ describe('LiquidSwapClient', () => {
       approvalSkipped: true,
     });
   });
+
+  it('forwards bearer token per request and falls back to constructor token', async () => {
+    post.mockResolvedValue({
+      data: {
+        txData: {},
+        estimatedOutput: '1',
+        route: {},
+      },
+    });
+
+    const client = new LiquidSwapClient('http://liquid-swap', 'service-token');
+    await client.prepareSwap({
+      fromChainId: 8453,
+      toChainId: 8453,
+      fromToken: '0x1',
+      toToken: '0x2',
+      amount: '100',
+    }, {
+      bearerToken: 'user-token',
+    });
+
+    expect(post).toHaveBeenNthCalledWith(
+      1,
+      '/swap/prepare',
+      expect.any(Object),
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Bearer user-token',
+        },
+      })
+    );
+
+    await client.prepareSwap({
+      fromChainId: 8453,
+      toChainId: 8453,
+      fromToken: '0x1',
+      toToken: '0x2',
+      amount: '100',
+    });
+
+    expect(post).toHaveBeenNthCalledWith(
+      2,
+      '/swap/prepare',
+      expect.any(Object),
+      expect.objectContaining({
+        headers: {
+          Authorization: 'Bearer service-token',
+        },
+      })
+    );
+  });
 });

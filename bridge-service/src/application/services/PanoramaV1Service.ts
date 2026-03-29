@@ -4,10 +4,12 @@ import { HDNodeWallet, JsonRpcProvider, verifyMessage } from 'ethers';
 import { LiquidSwapClient, SwapPrepareResponse } from '../../infrastructure/clients/LiquidSwapClient';
 import { LidoClient } from '../../infrastructure/clients/LidoClient';
 import { LendingClient, LendingActionRequest } from '../../infrastructure/clients/LendingClient';
+import { LiquidStakingClient } from '../../infrastructure/clients/LiquidStakingClient';
 import { DatabaseGatewayClient, PlainObject } from '../../infrastructure/clients/DatabaseGatewayClient';
 import { WalletExecutionStrategy, WalletProviderAdapterPort } from '../../domain/ports/WalletProviderAdapterPort';
 import { WalletBalanceReader } from './WalletBalanceReader';
 import { BridgeRuntimeConfig, createBridgeRuntimeConfigFromEnv, resolveRpcUrl } from '../../config/runtime';
+import { LiquidStakingOperationService } from './LiquidStakingOperationService';
 
 export type WalletProvider = 'thirdweb' | 'wdk';
 
@@ -71,6 +73,7 @@ export interface CreatePolicyRequest {
 
 export interface CreateSwapRequest {
   userId: string;
+  authToken?: string;
   walletId: string;
   policyId: string;
   provider: WalletProvider;
@@ -90,6 +93,7 @@ export interface CreateSwapRequest {
 
 export interface PrepareSwapRequest {
   userId: string;
+  authToken?: string;
   walletId: string;
   policyId: string;
   provider: WalletProvider;
@@ -158,6 +162,72 @@ export interface CreateLendingActionRequest {
   };
 }
 
+export interface GetLiquidStakePositionRequest {
+  userId: string;
+  address: string;
+}
+
+export interface PrepareLiquidStakeRequest {
+  userId: string;
+  walletId: string;
+  policyId: string;
+  provider: WalletProvider;
+  idempotencyKey?: string;
+  signedIntent: string;
+  liquidStake: {
+    chainId: number;
+    token: string;
+    amountRaw: string;
+    amountDisplay: string;
+  };
+}
+
+export interface PrepareLiquidUnlockRequest {
+  userId: string;
+  walletId: string;
+  policyId: string;
+  provider: WalletProvider;
+  idempotencyKey?: string;
+  signedIntent: string;
+  liquidStake: {
+    chainId: number;
+    token: string;
+    sAvaxAmountRaw: string;
+    sAvaxAmountDisplay: string;
+  };
+}
+
+export interface PrepareLiquidRedeemRequest {
+  userId: string;
+  walletId: string;
+  policyId: string;
+  provider: WalletProvider;
+  idempotencyKey?: string;
+  signedIntent: string;
+  liquidStake: {
+    chainId: number;
+    token: string;
+    userUnlockIndex: number;
+  };
+}
+
+export interface SubmitPreparedLiquidStakeRequest {
+  userId: string;
+  operationId: string;
+  walletId: string;
+  txHashes: SubmitPreparedSwapRequest['txHashes'];
+  metadata?: PlainObject;
+}
+
+export interface FailPreparedLiquidStakeRequest {
+  userId: string;
+  operationId: string;
+  walletId: string;
+  errorCode?: string;
+  errorMessage: string;
+  metadata?: PlainObject;
+}
+
 interface PolicyEnvelope {
   id: string;
   userId: string;
@@ -203,16 +273,36 @@ interface WalletExportBundle {
 }
 
 export class PanoramaV1Service {
+  private readonly liquidStakingOperations: LiquidStakingOperationService;
+
   constructor(
     private readonly dbGateway: DatabaseGatewayClient,
     private readonly swapClient: LiquidSwapClient,
     private readonly lidoClient: LidoClient,
     private readonly lendingClient: LendingClient,
+    private readonly liquidStakingClient: LiquidStakingClient,
     private readonly adapters: Record<WalletProvider, WalletProviderAdapterPort>,
     private readonly defaultWalletProvider: WalletProvider = 'wdk',
     private readonly walletBalanceReader: WalletBalanceReader = new WalletBalanceReader(),
     private readonly runtimeConfig: BridgeRuntimeConfig = createBridgeRuntimeConfigFromEnv()
-  ) {}
+  ) {
+    this.liquidStakingOperations = new LiquidStakingOperationService({
+      dbGateway: this.dbGateway,
+      liquidStakingClient: this.liquidStakingClient,
+      getOwnedWallet: (walletId, userId) => this.getOwnedWallet(walletId, userId),
+      getOwnedOperation: (operationId, userId, action) => this.getOwnedOperation(operationId, userId, action),
+      getValidatedPolicy: (policyId, userId) => this.getValidatedPolicy(policyId, userId),
+      assertOwnershipVerified: (wallet) => this.assertOwnershipVerified(wallet),
+      assertWalletProviderMatch: (wallet, provider, context) => this.assertWalletProviderMatch(wallet, provider, context),
+      assertPolicyAction: (policy, input) => this.assertPolicyAction(policy, input),
+      assertExecutionAllowed: async ({ provider, walletAddress, action, chainId, metadata }) => {
+        await this.resolveAdapter(provider).assertExecutionAllowed({ walletAddress, action, chainId, metadata });
+      },
+      emitEvent: (userId, event, data, operationId) => this.emitEvent(userId, event, data, operationId),
+      mapExecutionError: (error) => this.mapExecutionError(error),
+      isTerminalOperationStatus: (status) => this.isTerminalOperationStatus(status),
+    });
+  }
 
   private resolveAdapter(provider: WalletProvider): WalletProviderAdapterPort {
     const adapter = this.adapters[provider];
@@ -1133,12 +1223,45 @@ export class PanoramaV1Service {
   }
 
   async getStake(operationId: string, userId: string): Promise<PlainObject> {
-    return await this.getOwnedOperation(operationId, userId, 'stake');
+    const operation = await this.getOwnedOperation(operationId, userId);
+    const action = String(operation.action || '');
+    if (action !== 'stake' && action !== 'request_unlock' && action !== 'redeem') {
+      const error = new Error('Operation type mismatch') as Error & { status?: number; code?: string };
+      error.status = 409;
+      error.code = 'OPERATION_TYPE_MISMATCH';
+      throw error;
+    }
+    return operation;
   }
 
   async getLendingMarkets(userId: string): Promise<PlainObject> {
     await this.dbGateway.upsertUser(userId);
     return await this.lendingClient.getMarkets();
+  }
+
+  async getLiquidStakePosition(input: GetLiquidStakePositionRequest): Promise<PlainObject> {
+    await this.dbGateway.upsertUser(input.userId);
+    return await this.liquidStakingOperations.getPosition(input.address) as PlainObject;
+  }
+
+  async prepareLiquidStake(input: PrepareLiquidStakeRequest): Promise<PlainObject> {
+    return await this.liquidStakingOperations.prepareStake(input);
+  }
+
+  async prepareLiquidUnlock(input: PrepareLiquidUnlockRequest): Promise<PlainObject> {
+    return await this.liquidStakingOperations.prepareRequestUnlock(input);
+  }
+
+  async prepareLiquidRedeem(input: PrepareLiquidRedeemRequest): Promise<PlainObject> {
+    return await this.liquidStakingOperations.prepareRedeem(input);
+  }
+
+  async submitPreparedLiquidOperation(input: SubmitPreparedLiquidStakeRequest): Promise<PlainObject> {
+    return await this.liquidStakingOperations.submitPreparedOperation(input);
+  }
+
+  async failPreparedLiquidOperation(input: FailPreparedLiquidStakeRequest): Promise<PlainObject> {
+    return await this.liquidStakingOperations.failPreparedOperation(input);
   }
 
   async createLendingAction(input: CreateLendingActionRequest): Promise<PlainObject> {
@@ -1620,6 +1743,8 @@ export class PanoramaV1Service {
           sender: walletAddress,
           recipient: walletAddress,
           provider: swapProvider,
+        }, {
+          bearerToken: input.authToken,
         });
       } catch (error: any) {
         lastError = error;

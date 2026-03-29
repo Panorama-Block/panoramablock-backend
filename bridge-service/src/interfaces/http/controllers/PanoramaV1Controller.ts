@@ -111,6 +111,48 @@ const CreateStakeSchema = z.object({
   }),
 });
 
+const AddressParamSchema = z.object({
+  address: z.string().min(1),
+});
+
+const PrepareLiquidStakeSchema = z.object({
+  walletId: z.string().uuid(),
+  policyId: z.string().uuid(),
+  provider: z.enum(['thirdweb', 'wdk']),
+  signedIntent: z.string().min(1),
+  liquidStake: z.object({
+    chainId: z.literal(43114),
+    token: z.string().min(1),
+    amountRaw: z.string().min(1),
+    amountDisplay: z.string().min(1),
+  }),
+});
+
+const PrepareLiquidUnlockSchema = z.object({
+  walletId: z.string().uuid(),
+  policyId: z.string().uuid(),
+  provider: z.enum(['thirdweb', 'wdk']),
+  signedIntent: z.string().min(1),
+  liquidStake: z.object({
+    chainId: z.literal(43114),
+    token: z.string().min(1),
+    sAvaxAmountRaw: z.string().min(1),
+    sAvaxAmountDisplay: z.string().min(1),
+  }),
+});
+
+const PrepareLiquidRedeemSchema = z.object({
+  walletId: z.string().uuid(),
+  policyId: z.string().uuid(),
+  provider: z.enum(['thirdweb', 'wdk']),
+  signedIntent: z.string().min(1),
+  liquidStake: z.object({
+    chainId: z.literal(43114),
+    token: z.string().min(1),
+    userUnlockIndex: z.number().int().nonnegative(),
+  }),
+});
+
 const CreateLendingSchema = z.object({
   walletId: z.string().uuid(),
   policyId: z.string().uuid(),
@@ -151,6 +193,13 @@ export class PanoramaV1Controller {
   private getIdempotencyKey(req: Request): string | undefined {
     const header = req.headers['x-idempotency-key'];
     return typeof header === 'string' && header.trim().length > 0 ? header.trim() : undefined;
+  }
+
+  private getBearerToken(req: Request): string | undefined {
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    return typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7).trim()
+      : undefined;
   }
 
   async createWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -311,6 +360,7 @@ export class PanoramaV1Controller {
       const payload = CreateSwapSchema.parse(req.body);
       const result = await this.service.createSwap({
         userId,
+        authToken: this.getBearerToken(req),
         idempotencyKey: this.getIdempotencyKey(req),
         ...payload,
       });
@@ -326,6 +376,7 @@ export class PanoramaV1Controller {
       const payload = CreateSwapSchema.parse(req.body);
       const result = await this.service.prepareSwap({
         userId,
+        authToken: this.getBearerToken(req),
         idempotencyKey: this.getIdempotencyKey(req),
         ...payload,
       });
@@ -398,6 +449,94 @@ export class PanoramaV1Controller {
       const userId = this.requireUserId(req);
       const operationId = z.string().uuid().parse(req.params.id);
       const result = await this.service.getStake(operationId, userId);
+      res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getLiquidStakePosition(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.requireUserId(req);
+      const { address } = AddressParamSchema.parse(req.params);
+      const result = await this.service.getLiquidStakePosition({ userId, address });
+      res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async prepareLiquidStake(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.requireUserId(req);
+      const payload = PrepareLiquidStakeSchema.parse(req.body);
+      const result = await this.service.prepareLiquidStake({
+        userId,
+        idempotencyKey: this.getIdempotencyKey(req),
+        ...payload,
+      });
+      res.status(201).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async prepareLiquidUnlock(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.requireUserId(req);
+      const payload = PrepareLiquidUnlockSchema.parse(req.body);
+      const result = await this.service.prepareLiquidUnlock({
+        userId,
+        idempotencyKey: this.getIdempotencyKey(req),
+        ...payload,
+      });
+      res.status(201).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async prepareLiquidRedeem(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.requireUserId(req);
+      const payload = PrepareLiquidRedeemSchema.parse(req.body);
+      const result = await this.service.prepareLiquidRedeem({
+        userId,
+        idempotencyKey: this.getIdempotencyKey(req),
+        ...payload,
+      });
+      res.status(201).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async submitPreparedLiquidOperation(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.requireUserId(req);
+      const operationId = z.string().uuid().parse(req.params.id);
+      const payload = SubmitPreparedSwapSchema.parse(req.body);
+      const result = await this.service.submitPreparedLiquidOperation({
+        userId,
+        operationId,
+        ...payload,
+      });
+      res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async failPreparedLiquidOperation(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = this.requireUserId(req);
+      const operationId = z.string().uuid().parse(req.params.id);
+      const payload = FailPreparedSwapSchema.parse(req.body);
+      const result = await this.service.failPreparedLiquidOperation({
+        userId,
+        operationId,
+        ...payload,
+      });
       res.status(200).json({ success: true, data: result });
     } catch (error) {
       next(error);

@@ -36,6 +36,18 @@ function createService() {
     getMarkets: jest.fn().mockResolvedValue({ markets: [] }),
     act: jest.fn().mockResolvedValue({ txHash: '0xlend' }),
   };
+  const liquidStakingClient: any = {
+    getPosition: jest.fn().mockResolvedValue({
+      userAddress: '0xwallet',
+      sAvaxBalance: '100',
+      avaxEquivalent: '100',
+      exchangeRate: '1',
+      pendingUnlocks: [],
+    }),
+    prepareStake: jest.fn().mockResolvedValue({ bundle: { steps: [{ to: '0x1', data: '0x', value: '100', chainId: 43114 }] }, metadata: { protocol: 'savax' } }),
+    prepareRequestUnlock: jest.fn().mockResolvedValue({ bundle: { steps: [{ to: '0x2', data: '0x', value: '0', chainId: 43114 }] }, metadata: { protocol: 'savax' } }),
+    prepareRedeem: jest.fn().mockResolvedValue({ bundle: { steps: [{ to: '0x3', data: '0x', value: '0', chainId: 43114 }] }, metadata: { protocol: 'savax' } }),
+  };
 
   const adapter: any = {
     provider: 'wdk',
@@ -57,12 +69,12 @@ function createService() {
     readBalances: jest.fn(),
   };
 
-  const service = new PanoramaV1Service(dbGateway, swapClient, lidoClient, lendingClient, {
+  const service = new PanoramaV1Service(dbGateway, swapClient, lidoClient, lendingClient, liquidStakingClient, {
     thirdweb: adapter,
     wdk: adapter,
   } as any, 'wdk', walletBalanceReader as WalletBalanceReader);
 
-  return { service, dbGateway, swapClient, lidoClient, lendingClient, adapter, walletBalanceReader };
+  return { service, dbGateway, swapClient, lidoClient, lendingClient, liquidStakingClient, adapter, walletBalanceReader };
 }
 
 describe('PanoramaV1Service policy validation', () => {
@@ -157,6 +169,7 @@ describe('PanoramaV1Service policy validation', () => {
       { prepareSwap: jest.fn() } as any,
       { stake: jest.fn() } as any,
       { getMarkets: jest.fn(), act: jest.fn() } as any,
+      { getPosition: jest.fn(), prepareStake: jest.fn(), prepareRequestUnlock: jest.fn(), prepareRedeem: jest.fn() } as any,
       { thirdweb: adapter, wdk: adapter } as any,
       'thirdweb'
     );
@@ -646,8 +659,15 @@ describe('PanoramaV1Service policy validation', () => {
 
     expect(dbGateway.createIntentTransaction).toHaveBeenCalled();
     expect(dbGateway.updateIntentTransaction).toHaveBeenCalled();
-    expect(swapClient.prepareSwap).toHaveBeenCalledWith(expect.not.objectContaining({ provider: 'wdk' }));
-    expect(swapClient.prepareSwap).toHaveBeenNthCalledWith(1, expect.objectContaining({ provider: 'thirdweb' }));
+    expect(swapClient.prepareSwap).toHaveBeenCalledWith(
+      expect.not.objectContaining({ provider: 'wdk' }),
+      expect.objectContaining({ bearerToken: undefined })
+    );
+    expect(swapClient.prepareSwap).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ provider: 'thirdweb' }),
+      expect.objectContaining({ bearerToken: undefined })
+    );
     expect(result.status).toBe('submitted');
   });
 
@@ -704,7 +724,10 @@ describe('PanoramaV1Service policy validation', () => {
     });
 
     expect(adapter.executePlan).not.toHaveBeenCalled();
-    expect(swapClient.prepareSwap).toHaveBeenCalledWith(expect.objectContaining({ provider: 'thirdweb' }));
+    expect(swapClient.prepareSwap).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'thirdweb' }),
+      expect.objectContaining({ bearerToken: undefined })
+    );
     expect((result as any).prepared.transactions).toEqual([{ to: '0x1' }]);
     expect((result as any).prepared.provider).toBe('uniswap-trading-api');
     expect((result as any).prepared.providerDebug).toEqual({ quoteId: 'quote-1' });
@@ -761,7 +784,64 @@ describe('PanoramaV1Service policy validation', () => {
       },
     });
 
-    expect(swapClient.prepareSwap).toHaveBeenCalledWith(expect.objectContaining({ provider: 'uniswap' }));
+    expect(swapClient.prepareSwap).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'uniswap' }),
+      expect.objectContaining({ bearerToken: undefined })
+    );
+  });
+
+  it('forwards user bearer token to liquid swap prepare when available', async () => {
+    const { service, dbGateway, adapter, swapClient } = createService();
+    adapter.getExecutionStrategy.mockReturnValue('client');
+    swapClient.prepareSwap.mockResolvedValue({
+      txData: { to: '0x1' },
+      route: {},
+      estimatedOutput: '100',
+      provider: 'thirdweb',
+    });
+
+    dbGateway.getWallet.mockResolvedValue({
+      id: 'w1',
+      userId: 'u1',
+      address: '0xwallet',
+      metadata: { provider: 'wdk', ownershipVerified: true, mode: 'client-managed' },
+    });
+    dbGateway.getPolicy.mockResolvedValue({
+      payload: {
+        id: 'p1',
+        userId: 'u1',
+        walletId: 'w1',
+        allowedActions: ['swap'],
+        allowedAssets: ['0xfrom', '0xto'],
+        maxAmount: '1000',
+        allowedChains: [8453],
+        expiresAt: new Date(Date.now() + 60000).toISOString(),
+        status: 'approved',
+      },
+    });
+    dbGateway.getIntentTransaction.mockResolvedValue({ id: 'intent', userId: 'u1', action: 'swap', status: 'prepared' });
+
+    await service.prepareSwap({
+      userId: 'u1',
+      authToken: 'user-jwt-token',
+      walletId: 'w1',
+      policyId: 'p1',
+      provider: 'wdk',
+      signedIntent: 'signed',
+      swap: {
+        fromChainId: 8453,
+        toChainId: 8453,
+        fromToken: '0xfrom',
+        toToken: '0xto',
+        amountRaw: '100',
+        amountDisplay: '100',
+      },
+    });
+
+    expect(swapClient.prepareSwap).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ bearerToken: 'user-jwt-token' })
+    );
   });
 
   it('marks legacy createSwap as failed when wallet requires client execution', async () => {
@@ -1014,6 +1094,7 @@ describe('PanoramaV1Service policy validation', () => {
       { prepareSwap: jest.fn() } as any,
       { stake: jest.fn() } as any,
       { getMarkets: jest.fn(), act: jest.fn() } as any,
+      { getPosition: jest.fn(), prepareStake: jest.fn(), prepareRequestUnlock: jest.fn(), prepareRedeem: jest.fn() } as any,
       { thirdweb: adapter, wdk: adapter } as any,
       'wdk',
       { readBalances: jest.fn() } as any,
@@ -1158,8 +1239,16 @@ describe('PanoramaV1Service policy validation', () => {
     });
 
     expect(swapClient.prepareSwap).toHaveBeenCalledTimes(2);
-    expect(swapClient.prepareSwap).toHaveBeenNthCalledWith(1, expect.objectContaining({ provider: 'thirdweb' }));
-    expect(swapClient.prepareSwap).toHaveBeenNthCalledWith(2, expect.objectContaining({ provider: 'uniswap-trading-api' }));
+    expect(swapClient.prepareSwap).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ provider: 'thirdweb' }),
+      expect.objectContaining({ bearerToken: undefined })
+    );
+    expect(swapClient.prepareSwap).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ provider: 'uniswap-trading-api' }),
+      expect.objectContaining({ bearerToken: undefined })
+    );
     expect(result.status).toBe('submitted');
   });
 
@@ -1372,5 +1461,121 @@ describe('PanoramaV1Service policy validation', () => {
         lending: { chainId: 1, action: 'supply', token: 'USDC', amountRaw: '100', amountDisplay: '100' },
       })
     ).rejects.toMatchObject({ code: 'OWNERSHIP_NOT_VERIFIED' });
+  });
+
+  it('prepares a liquid stake operation without changing legacy staking flow', async () => {
+    const { service, dbGateway, liquidStakingClient, adapter } = createService();
+    dbGateway.getWallet.mockResolvedValue({
+      id: 'w1',
+      userId: 'u1',
+      chain: 'avalanche',
+      walletType: 'evm',
+      address: '0xwallet',
+      metadata: { provider: 'wdk', ownershipVerified: true },
+      tenantId: 'tenant-test',
+    });
+    dbGateway.getPolicy.mockResolvedValue({
+      tenantId: 'tenant-test',
+      payload: {
+        id: 'p1',
+        userId: 'u1',
+        allowedActions: ['stake', 'request_unlock', 'redeem'],
+        allowedAssets: ['avax', 'savax'],
+        maxAmount: '100000000000000000000',
+        allowedChains: [43114],
+        expiresAt: '2099-01-01T00:00:00.000Z',
+        status: 'approved',
+      },
+    });
+    dbGateway.getIntentTransaction.mockResolvedValue({
+      id: 'liq1',
+      userId: 'u1',
+      walletId: 'w1',
+      action: 'stake',
+      protocol: 'liquid-staking-v1',
+      status: 'prepared',
+      txHashes: [],
+      metadata: {
+        preparedChainId: 43114,
+        preparedTransactionsCount: 1,
+      },
+      tenantId: 'tenant-test',
+    });
+
+    const result = await service.prepareLiquidStake({
+      userId: 'u1',
+      walletId: 'w1',
+      policyId: 'p1',
+      provider: 'wdk',
+      signedIntent: 'signed',
+      liquidStake: {
+        chainId: 43114,
+        token: 'AVAX',
+        amountRaw: '100',
+        amountDisplay: '100',
+      },
+    });
+
+    expect(adapter.assertExecutionAllowed).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'stake',
+      chainId: 43114,
+    }));
+    expect(liquidStakingClient.prepareStake).toHaveBeenCalledWith({
+      userAddress: '0xwallet',
+      amount: '100',
+    });
+    expect((result as any).prepared.transactions).toHaveLength(1);
+  });
+
+  it('returns liquid staking positions through the dedicated client', async () => {
+    const { service, dbGateway, liquidStakingClient } = createService();
+    dbGateway.upsertUser.mockResolvedValue(undefined);
+
+    const result = await service.getLiquidStakePosition({ userId: 'u1', address: '0xwallet' });
+
+    expect(dbGateway.upsertUser).toHaveBeenCalledWith('u1');
+    expect(liquidStakingClient.getPosition).toHaveBeenCalledWith('0xwallet');
+    expect((result as any).sAvaxBalance).toBe('100');
+  });
+
+  it('submits prepared liquid staking tx hashes', async () => {
+    const { service, dbGateway } = createService();
+    dbGateway.getWallet.mockResolvedValue({
+      id: 'w1',
+      userId: 'u1',
+      chain: 'avalanche',
+      walletType: 'evm',
+      address: '0xwallet',
+      metadata: { provider: 'wdk', ownershipVerified: true },
+      tenantId: 'tenant-test',
+    });
+    dbGateway.getIntentTransaction.mockResolvedValue({
+      id: 'liq1',
+      userId: 'u1',
+      walletId: 'w1',
+      action: 'stake',
+      protocol: 'liquid-staking-v1',
+      status: 'prepared',
+      fromChainId: 43114,
+      txHashes: [],
+      metadata: {
+        preparedChainId: 43114,
+        preparedTransactionsCount: 1,
+      },
+      tenantId: 'tenant-test',
+    });
+
+    const result = await service.submitPreparedLiquidOperation({
+      userId: 'u1',
+      operationId: 'liq1',
+      walletId: 'w1',
+      txHashes: [{ hash: '0xabc', chainId: 43114, status: 'pending', materializationState: 'verified' } as any],
+    });
+
+    expect(dbGateway.updateIntentTransaction).toHaveBeenCalledWith('liq1', expect.objectContaining({
+      status: 'submitted',
+      txHashes: [expect.objectContaining({ hash: '0xabc', chainId: 43114 })],
+    }));
+    expect((result as any).id).toBe('liq1');
   });
 });

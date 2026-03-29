@@ -1,0 +1,56 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+
+groups:
+  - docker
+
+users:
+  - default
+  - name: ${app_user}
+    groups: docker
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+
+write_files:
+  - path: /etc/docker/daemon.json
+    permissions: "0644"
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      }
+  - path: /etc/caddy/Caddyfile
+    permissions: "0644"
+    content: |
+      {
+        email {$LETSENCRYPT_EMAIL}
+      }
+
+      {$APP_DOMAIN} {
+        respond "Caddy installed. Deploy the Panorama bundle to activate routes." 200
+      }
+
+runcmd:
+  - apt-get update
+  - apt-get install -y ca-certificates curl gnupg lsb-release jq unzip apt-transport-https
+  - install -m 0755 -d /etc/apt/keyrings
+  - bash -lc "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg"
+  - bash -lc "echo 'deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable' > /etc/apt/sources.list.d/docker.list"
+  - bash -lc "curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg"
+  - bash -lc "curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list"
+  - bash -lc "curl -sL https://aka.ms/InstallAzureCLIDeb | bash"
+  - apt-get update
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin caddy
+  - systemctl enable docker
+  - systemctl restart docker
+  - systemctl enable caddy
+  - systemctl restart caddy
+  - usermod -aG docker ${admin_username}
+  - install -d -o ${app_user} -g ${app_user} ${app_directory}
+  - install -d -o ${app_user} -g ${app_user} ${app_directory}/releases
+  - install -d -o ${app_user} -g ${app_user} ${app_directory}/current
+  - install -d -o ${app_user} -g ${app_user} /var/log/panorama

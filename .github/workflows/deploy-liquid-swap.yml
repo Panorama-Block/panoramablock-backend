@@ -2,13 +2,6 @@ name: Deploy Liquid Swap
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'liquid-swap-service/**'
-      - 'shared/token-registry.json'
-      - '.github/workflows/deploy-liquid-swap.yml'
 
 permissions:
   id-token: write

@@ -52,7 +52,7 @@ export interface ExecutionPlanInput {
   signedIntent: string;
   txData: Record<string, unknown>;
   route?: Record<string, unknown>;
-  action?: 'swap' | 'stake' | 'supply' | 'withdraw' | 'borrow' | 'repay';
+  action?: 'swap' | 'stake' | 'request_unlock' | 'redeem' | 'supply' | 'withdraw' | 'borrow' | 'repay';
   chainId?: number;
   walletMetadata?: Record<string, unknown>;
 }
@@ -76,7 +76,7 @@ export type WalletExecutionStrategy = 'client' | 'delegated' | 'hybrid';
 
 export interface ExecutionEligibilityInput {
   walletAddress: string;
-  action: 'swap' | 'stake' | 'supply' | 'withdraw' | 'borrow' | 'repay';
+  action: 'swap' | 'stake' | 'request_unlock' | 'redeem' | 'supply' | 'withdraw' | 'borrow' | 'repay';
   chainId?: number;
   metadata?: Record<string, unknown>;
 }

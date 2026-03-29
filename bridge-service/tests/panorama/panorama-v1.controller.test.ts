@@ -5,6 +5,12 @@ function createMocks() {
     linkWallet: jest.fn(),
     prepareSwap: jest.fn(),
     submitPreparedSwap: jest.fn(),
+    getLiquidStakePosition: jest.fn(),
+    prepareLiquidStake: jest.fn(),
+    prepareLiquidUnlock: jest.fn(),
+    prepareLiquidRedeem: jest.fn(),
+    submitPreparedLiquidOperation: jest.fn(),
+    failPreparedLiquidOperation: jest.fn(),
     prepareOwnershipChallenge: jest.fn(),
     verifyOwnership: jest.fn(),
   };
@@ -215,5 +221,61 @@ describe('PanoramaV1Controller wallet endpoints', () => {
       txHashes: [{ hash: '0xabc', chainId: 8453 }],
     });
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('calls service for liquid staking prepare requests', async () => {
+    const { controller, service, res, next } = createMocks();
+    service.prepareLiquidStake.mockResolvedValue({ id: 'liq1', status: 'prepared', action: 'stake' });
+
+    await controller.prepareLiquidStake(
+      {
+        headers: {},
+        user: { id: 'u1' },
+        body: {
+          walletId: '11111111-1111-4111-8111-111111111111',
+          policyId: '22222222-2222-4222-8222-222222222222',
+          provider: 'wdk',
+          signedIntent: 'signed',
+          liquidStake: {
+            chainId: 43114,
+            token: 'AVAX',
+            amountRaw: '100',
+            amountDisplay: '100',
+          },
+        },
+      } as any,
+      res,
+      next
+    );
+
+    expect(service.prepareLiquidStake).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u1' }));
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  it('rejects invalid liquid redeem payload', async () => {
+    const { controller, res, next } = createMocks();
+
+    await controller.prepareLiquidRedeem(
+      {
+        headers: {},
+        user: { id: 'u1' },
+        body: {
+          walletId: '11111111-1111-4111-8111-111111111111',
+          policyId: '22222222-2222-4222-8222-222222222222',
+          provider: 'wdk',
+          signedIntent: 'signed',
+          liquidStake: {
+            chainId: 43114,
+            token: 'sAVAX',
+            userUnlockIndex: -1,
+          },
+        },
+      } as any,
+      res,
+      next
+    );
+
+    expect(next).toHaveBeenCalledWith(expect.any(Error));
+    expect(res.status).not.toHaveBeenCalled();
   });
 });

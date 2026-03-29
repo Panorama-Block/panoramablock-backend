@@ -19,6 +19,12 @@ describe('Panorama v1 routes', () => {
         createSwap: jest.fn(),
         getSwap: jest.fn(),
         createStake: jest.fn(),
+        getLiquidStakePosition: jest.fn(),
+        prepareLiquidStake: jest.fn(),
+        prepareLiquidUnlock: jest.fn(),
+        prepareLiquidRedeem: jest.fn(),
+        submitPreparedLiquidOperation: jest.fn(),
+        failPreparedLiquidOperation: jest.fn(),
         getStake: jest.fn(),
         getLendingMarkets: jest.fn(),
         createLendingAction: jest.fn(),
@@ -42,6 +48,12 @@ describe('Panorama v1 routes', () => {
     expect(routePaths).toContain('/wallets/:id/ownership-status');
     expect(routePaths).toContain('/swaps');
     expect(routePaths).toContain('/staking/stake');
+    expect(routePaths).toContain('/staking/liquid/position/:address');
+    expect(routePaths).toContain('/staking/liquid/prepare-stake');
+    expect(routePaths).toContain('/staking/liquid/prepare-request-unlock');
+    expect(routePaths).toContain('/staking/liquid/prepare-redeem');
+    expect(routePaths).toContain('/staking/liquid/:id/submit');
+    expect(routePaths).toContain('/staking/liquid/:id/fail');
     expect(routePaths).toContain('/lending/act');
     expect(routePaths).not.toContain('/intents');
   });

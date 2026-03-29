@@ -23,6 +23,12 @@ export function createPanoramaV1Routes(container: DIContainer): Router {
   router.post('/swaps/:id/submit', (req, res, next) => panoramaV1Controller.submitPreparedSwap(req, res, next));
   router.post('/swaps/:id/fail', (req, res, next) => panoramaV1Controller.failPreparedSwap(req, res, next));
   router.post('/staking/stake', (req, res, next) => panoramaV1Controller.createStake(req, res, next));
+  router.get('/staking/liquid/position/:address', (req, res, next) => panoramaV1Controller.getLiquidStakePosition(req, res, next));
+  router.post('/staking/liquid/prepare-stake', (req, res, next) => panoramaV1Controller.prepareLiquidStake(req, res, next));
+  router.post('/staking/liquid/prepare-request-unlock', (req, res, next) => panoramaV1Controller.prepareLiquidUnlock(req, res, next));
+  router.post('/staking/liquid/prepare-redeem', (req, res, next) => panoramaV1Controller.prepareLiquidRedeem(req, res, next));
+  router.post('/staking/liquid/:id/submit', (req, res, next) => panoramaV1Controller.submitPreparedLiquidOperation(req, res, next));
+  router.post('/staking/liquid/:id/fail', (req, res, next) => panoramaV1Controller.failPreparedLiquidOperation(req, res, next));
   router.get('/staking/:id', (req, res, next) => panoramaV1Controller.getStake(req, res, next));
   router.get('/lending/markets', (req, res, next) => panoramaV1Controller.getLendingMarkets(req, res, next));
   router.post('/lending/act', (req, res, next) => panoramaV1Controller.createLendingAction(req, res, next));

@@ -329,6 +329,8 @@ export class WdkWalletAdapter implements WalletProviderAdapterPort {
       case 'swap':
         return 'execute_swap';
       case 'stake':
+      case 'request_unlock':
+      case 'redeem':
         return 'execute_stake';
       case 'supply':
       case 'withdraw':

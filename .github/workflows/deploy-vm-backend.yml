@@ -1,0 +1,202 @@
+name: Deploy Backend To Azure VM
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "auth-service/**"
+      - "bridge-service/**"
+      - "dca-service/**"
+      - "diagram-service/**"
+      - "lending-service/**"
+      - "lido-service/**"
+      - "liquid-swap-service/**"
+      - "shared/token-registry.json"
+      - "deploy/azure-vm/**"
+      - ".github/workflows/deploy-vm-backend.yml"
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+env:
+  GHCR_REGISTRY: ghcr.io
+  IMAGE_TAG: ${{ github.sha }}
+  DEPLOY_PATH: /opt/panorama/current
+  KEY_VAULT_NAME: ${{ secrets.AZURE_KEY_VAULT_NAME }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: auth-service
+            context: ./auth-service
+            dockerfile: ./auth-service/Dockerfile
+          - name: bridge-service
+            context: ./bridge-service
+            dockerfile: ./bridge-service/Dockerfile
+          - name: dca-service
+            context: ./dca-service
+            dockerfile: ./dca-service/Dockerfile
+          - name: diagram-service
+            context: ./diagram-service
+            dockerfile: ./diagram-service/Dockerfile
+          - name: lending-service
+            context: ./lending-service
+            dockerfile: ./lending-service/Dockerfile
+          - name: lido-service
+            context: ./lido-service
+            dockerfile: ./lido-service/Dockerfile
+          - name: liquid-swap
+            context: .
+            dockerfile: ./liquid-swap-service/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image name
+        id: image
+        run: |
+          OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          echo "image=${GHCR_REGISTRY}/${OWNER_LOWER}/${{ matrix.name }}:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "namespace=${OWNER_LOWER}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        run: |
+          docker build -t "${{ steps.image.outputs.image }}" -f "${{ matrix.dockerfile }}" "${{ matrix.context }}"
+          docker push "${{ steps.image.outputs.image }}"
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Compute shared namespace
+        id: meta
+        run: |
+          OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          echo "namespace=${OWNER_LOWER}" >> "$GITHUB_OUTPUT"
+
+      - name: Render runtime env from Key Vault
+        run: |
+          rm -rf .deploy-tmp
+          mkdir -p .deploy-tmp
+          POSTGRES_ADMIN_USER=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-admin-user --query value -o tsv)
+          POSTGRES_ADMIN_PASSWORD=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-admin-password --query value -o tsv)
+          echo "POSTGRES_ADMIN_USER=${POSTGRES_ADMIN_USER}" >> "$GITHUB_ENV"
+          echo "POSTGRES_ADMIN_PASSWORD=${POSTGRES_ADMIN_PASSWORD}" >> "$GITHUB_ENV"
+          cat > .deploy-tmp/.env.production <<EOF
+          APP_DOMAIN=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name app-domain --query value -o tsv)
+          LETSENCRYPT_EMAIL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name letsencrypt-email --query value -o tsv)
+          GHCR_REGISTRY=${GHCR_REGISTRY}
+          GHCR_NAMESPACE=${{ steps.meta.outputs.namespace }}
+          GHCR_USERNAME=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name ghcr-username --query value -o tsv)
+          GHCR_PASSWORD=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name ghcr-password --query value -o tsv)
+          IMAGE_TAG=${IMAGE_TAG}
+          EXECUTION_SERVICE_IMAGE=${GHCR_REGISTRY}/${{ steps.meta.outputs.namespace }}/execution-service:latest
+          NODE_ENV=production
+          LOG_LEVEL=info
+          POSTGRES_HOST=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-host --query value -o tsv)
+          POSTGRES_APP_USER=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-app-user --query value -o tsv)
+          POSTGRES_APP_PASSWORD=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-app-password --query value -o tsv)
+          REDIS_PASS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name redis-pass --query value -o tsv)
+          REDIS_HOST=redis
+          REDIS_PORT=6379
+          REDIS_URL=redis://:$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name redis-pass --query value -o tsv)@redis:6379
+          THIRDWEB_CLIENT_ID=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name thirdweb-client-id --query value -o tsv)
+          THIRDWEB_SECRET_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name thirdweb-secret-key --query value -o tsv)
+          ENGINE_ACCESS_TOKEN=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name engine-access-token --query value -o tsv)
+          ADMIN_WALLET_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name admin-wallet-address --query value -o tsv)
+          ENCRYPTION_PASSWORD=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name encryption-password --query value -o tsv)
+          AUTH_PRIVATE_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name auth-private-key --query value -o tsv)
+          AUTH_DOMAIN=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name app-domain --query value -o tsv)
+          TON_JWT_SECRET=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name ton-jwt-secret --query value -o tsv)
+          JWT_SECRET=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name jwt-secret --query value -o tsv)
+          PRIVATE_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name private-key --query value -o tsv)
+          SWAP_SENDER_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name swap-sender-address --query value -o tsv)
+          SWAP_RECEIVER_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name swap-receiver-address --query value -o tsv)
+          X_RANGO_ID=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name x-rango-id --query value -o tsv)
+          RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name rpc-url --query value -o tsv)
+          ETHEREUM_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name ethereum-rpc-url --query value -o tsv)
+          POLYGON_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name polygon-rpc-url --query value -o tsv)
+          BSC_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name bsc-rpc-url --query value -o tsv)
+          BASE_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name base-rpc-url --query value -o tsv)
+          OPTIMISM_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name optimism-rpc-url --query value -o tsv)
+          ARBITRUM_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name arbitrum-rpc-url --query value -o tsv)
+          AVALANCHE_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name avalanche-rpc-url --query value -o tsv)
+          AVAX_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name avax-rpc-url --query value -o tsv)
+          EXECUTOR_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name executor-address --query value -o tsv)
+          AVAX_EXECUTOR_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name avax-executor-address --query value -o tsv)
+          DCA_VAULT_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name dca-vault-address --query value -o tsv)
+          VALIDATION_CONTRACT_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name validation-contract-address --query value -o tsv)
+          LAYERSWAP_API_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name layerswap-api-key --query value -o tsv)
+          LAYERSWAP_TON_VAULT=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name layerswap-ton-vault --query value -o tsv)
+          EOF
+
+      - name: Prepare deploy bundle
+        run: |
+          mkdir -p .deploy-tmp/shared .deploy-tmp/scripts
+          cp deploy/azure-vm/docker-compose.yml .deploy-tmp/docker-compose.yml
+          cp deploy/azure-vm/caddy/Caddyfile .deploy-tmp/Caddyfile
+          cp deploy/azure-vm/scripts/deploy.sh .deploy-tmp/scripts/deploy.sh
+          cp deploy/azure-vm/scripts/init-managed-postgres.sh .deploy-tmp/scripts/init-managed-postgres.sh
+          cp shared/token-registry.json .deploy-tmp/shared/token-registry.json
+          chmod +x .deploy-tmp/scripts/*.sh
+
+      - name: Copy bundle to VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          source: ".deploy-tmp/*"
+          target: "${{ env.DEPLOY_PATH }}"
+          strip_components: 1
+
+      - name: Run database bootstrap
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          envs: POSTGRES_ADMIN_USER,POSTGRES_ADMIN_PASSWORD
+          script: |
+            cd ${{ env.DEPLOY_PATH }}
+            set -a
+            source .env.production
+            set +a
+            ./scripts/init-managed-postgres.sh \
+              "$POSTGRES_HOST" \
+              "$POSTGRES_ADMIN_USER" \
+              "$POSTGRES_ADMIN_PASSWORD" \
+              panorama_core panorama_dca tac_service panorama_lido
+
+      - name: Pull latest images and restart stack
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            cd ${{ env.DEPLOY_PATH }}
+            chmod +x ./scripts/deploy.sh
+            APP_DIR=/opt/panorama ./scripts/deploy.sh
