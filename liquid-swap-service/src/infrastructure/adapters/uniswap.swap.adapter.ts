@@ -348,6 +348,7 @@ export class UniswapSwapAdapter implements ISwapProvider {
             to: approvalCheck.approval.to,
             data: approvalCheck.approval.data,
             value: this.normalizeHexValue(approvalCheck.approval.value),
+            feeMode: "advisory",
             action: "approval",
           });
         } else {
@@ -392,6 +393,7 @@ export class UniswapSwapAdapter implements ISwapProvider {
           gasLimit: txRequest.gasLimit,
           maxFeePerGas: txRequest.maxFeePerGas || txRequest.gasPrice,
           maxPriorityFeePerGas: txRequest.maxPriorityFeePerGas,
+          feeMode: "advisory",
         });
 
         expiresAt = new Date(Date.now() + 60000); // 1 minute
@@ -412,6 +414,7 @@ export class UniswapSwapAdapter implements ISwapProvider {
           to: "0x0000000000000000000000000000000000000000",
           data: orderResponse.encodedOrder,
           value: "0",
+          feeMode: "advisory",
         });
 
         expiresAt = new Date(orderResponse.orderInfo.deadline * 1000);

@@ -67,7 +67,7 @@ function createAvalancheProvider(options = {}) {
 
   console.log(`[Provider] Avalanche: ${avalancheRpcUrls.length} RPC endpoints configured (fallback enabled)`);
 
-  const fallback = new ethers.FallbackProvider(rpcProviders, 43114);
+  const fallback = new ethers.FallbackProvider(rpcProviders, 43114, { quorum: 1 });
 
   if (batchMaxCount === 1 && batchStallTime === 10) {
     _cachedProvider = fallback;

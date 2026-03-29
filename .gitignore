@@ -36,3 +36,19 @@ liquid-swap-service/package-lock.json
 *./package-lock.json
 # Temporary token registry copy for builds
 liquid-swap-service/shared/token-registry.json
+
+# Terraform local working directory and state
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+*.tfplan
+tfplan
+.terraform.tfstate.lock.info
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+cloud/iac/terraform/.env.terraform

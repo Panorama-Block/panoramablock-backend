@@ -2,12 +2,6 @@ name: Deploy Lido Service
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'lido-service/**'
-      - '.github/workflows/deploy-lido-service.yml'
 
 permissions:
   id-token: write

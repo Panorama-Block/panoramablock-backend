@@ -1,0 +1,250 @@
+name: panorama
+
+services:
+  auth_service:
+    image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/auth-service:${IMAGE_TAG}
+    container_name: panorama-auth-service
+    env_file:
+      - .env.production
+    environment:
+      PORT: 3001
+      NODE_ENV: ${NODE_ENV:-production}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      AUTH_DOMAIN: ${APP_DOMAIN}
+    ports:
+      - "127.0.0.1:3001:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_started
+
+  bridge_service:
+    image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/bridge-service:${IMAGE_TAG}
+    container_name: panorama-bridge-service
+    env_file:
+      - .env.production
+    environment:
+      PORT: 3005
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@${POSTGRES_HOST}:5432/tac_service?sslmode=require
+      TOKEN_REGISTRY_PATH: /app/shared/token-registry.json
+    ports:
+      - "127.0.0.1:3003:3005"
+    volumes:
+      - ./shared/token-registry.json:/app/shared/token-registry.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3005/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  liquid_swap_service:
+    image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/liquid-swap:${IMAGE_TAG}
+    container_name: panorama-liquid-swap
+    env_file:
+      - .env.production
+    environment:
+      PORT: 3002
+      NODE_ENV: ${NODE_ENV:-production}
+      AUTH_SERVICE_URL: http://auth_service:3001
+      ENGINE_URL: http://engine:3005
+      EXECUTION_LAYER_URL: http://execution_service:3010
+      TOKEN_REGISTRY_PATH: /app/shared/token-registry.json
+    ports:
+      - "127.0.0.1:3002:3002"
+    volumes:
+      - ./shared/token-registry.json:/app/shared/token-registry.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3002/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      auth_service:
+        condition: service_started
+      engine:
+        condition: service_started
+      execution_service:
+        condition: service_started
+
+  lido_service:
+    image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/lido-service:${IMAGE_TAG}
+    container_name: panorama-lido-service
+    env_file:
+      - .env.production
+    environment:
+      PORT: 3004
+      NODE_ENV: ${NODE_ENV:-production}
+      AUTH_SERVICE_URL: http://auth_service:3001
+      DATABASE_URL: postgresql://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@${POSTGRES_HOST}:5432/panorama_lido?sslmode=require
+      ENGINE_URL: http://engine:3005
+    ports:
+      - "127.0.0.1:3004:3004"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3004/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      auth_service:
+        condition: service_started
+      engine:
+        condition: service_started
+
+  lending_service:
+    image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/lending-service:${IMAGE_TAG}
+    container_name: panorama-lending-service
+    env_file:
+      - .env.production
+    environment:
+      PORT: 3007
+      NODE_ENV: ${NODE_ENV:-production}
+      AUTH_SERVICE_URL: http://auth_service:3001
+      EXECUTION_LAYER_URL: http://execution_service:3010
+      ENGINE_URL: http://engine:3005
+    ports:
+      - "127.0.0.1:3007:3007"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3007/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      auth_service:
+        condition: service_started
+      engine:
+        condition: service_started
+      execution_service:
+        condition: service_started
+
+  dca_service:
+    image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/dca-service:${IMAGE_TAG}
+    container_name: panorama-dca-service
+    env_file:
+      - .env.production
+    environment:
+      DCA_PORT: 3007
+      NODE_ENV: ${NODE_ENV:-production}
+      AUTH_SERVICE_URL: http://auth_service:3001
+      DATABASE_URL: postgresql://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@${POSTGRES_HOST}:5432/panorama_dca?sslmode=require
+      DB_HOST: ${POSTGRES_HOST}
+      DB_PORT: 5432
+      DB_NAME: panorama_dca
+      DB_USER: ${POSTGRES_APP_USER}
+      DB_PASSWORD: ${POSTGRES_APP_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      ENGINE_URL: http://engine:3005
+    ports:
+      - "127.0.0.1:3008:3007"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3007/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      auth_service:
+        condition: service_started
+      engine:
+        condition: service_started
+      redis:
+        condition: service_started
+
+  diagram_service:
+    image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/diagram-service:${IMAGE_TAG}
+    container_name: panorama-diagram-service
+    env_file:
+      - .env.production
+    environment:
+      PORT: 3010
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@${POSTGRES_HOST}:5432/panorama_core?sslmode=require
+    ports:
+      - "127.0.0.1:3010:3010"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3010/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  execution_service:
+    image: ${EXECUTION_SERVICE_IMAGE}
+    container_name: panorama-execution-service
+    env_file:
+      - .env.production
+    environment:
+      PORT: 3010
+      NODE_ENV: ${NODE_ENV:-production}
+      ALLOWED_ORIGINS: https://${APP_DOMAIN}
+    ports:
+      - "127.0.0.1:3011:3010"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3010/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  engine:
+    image: thirdweb/engine:latest
+    container_name: panorama-thirdweb-engine
+    env_file:
+      - .env.production
+    environment:
+      PORT: 3005
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      POSTGRES_CONNECTION_URL: postgresql://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@${POSTGRES_HOST}:5432/panorama_core?sslmode=require
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASS}@redis:6379}
+    ports:
+      - "127.0.0.1:3005:3005"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3005/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_started
+
+  worker_example:
+    image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/dca-service:${IMAGE_TAG}
+    container_name: panorama-worker-example
+    command: ["npm", "run", "worker"]
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@${POSTGRES_HOST}:5432/panorama_dca?sslmode=require
+    restart: unless-stopped
+    profiles:
+      - workers
+
+  redis:
+    image: redis:7-alpine
+    container_name: panorama-redis
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASS}"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASS} ping | grep PONG"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+networks:
+  default:
+    name: panorama-internal
