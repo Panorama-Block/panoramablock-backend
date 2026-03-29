@@ -14,10 +14,30 @@ shift 3
 export PGPASSWORD
 
 for db in "$@"; do
+  if [[ ! "$db" =~ ^[a-zA-Z0-9_]+$ ]]; then
+    echo "invalid database name: $db" >&2
+    exit 1
+  fi
+
+  exists="$(
+    docker run --rm \
+      -e PGPASSWORD="${PGPASSWORD}" \
+      postgres:16 \
+      psql "sslmode=require host=${PGHOST} user=${PGUSER} dbname=postgres" \
+      -v ON_ERROR_STOP=1 \
+      -tA \
+      -c "SELECT 1 FROM pg_database WHERE datname = '${db}'"
+  )"
+
+  if [[ "${exists}" == "1" ]]; then
+    echo "database ${db} already exists"
+    continue
+  fi
+
   docker run --rm \
     -e PGPASSWORD="${PGPASSWORD}" \
     postgres:16 \
     psql "sslmode=require host=${PGHOST} user=${PGUSER} dbname=postgres" \
     -v ON_ERROR_STOP=1 \
-    -c "SELECT 'CREATE DATABASE ${db}' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${db}')\\gexec"
+    -c "CREATE DATABASE \"${db}\""
 done
