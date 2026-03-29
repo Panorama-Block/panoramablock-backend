@@ -31,6 +31,17 @@ if [[ -f "${CADDY_SOURCE}" ]]; then
   sudo systemctl reload caddy
 fi
 
-docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" pull
-docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --remove-orphans
+TARGET_SERVICES=("$@")
+
+if [[ ${#TARGET_SERVICES[@]} -eq 0 && -n "${SERVICES:-}" ]]; then
+  read -r -a TARGET_SERVICES <<< "${SERVICES}"
+fi
+
+if [[ ${#TARGET_SERVICES[@]} -gt 0 ]]; then
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" pull "${TARGET_SERVICES[@]}"
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d "${TARGET_SERVICES[@]}"
+else
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" pull
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --remove-orphans
+fi
 docker image prune -af --filter "until=168h" || true

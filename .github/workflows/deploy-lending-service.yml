@@ -2,140 +2,21 @@ name: Deploy Lending Service
 
 on:
   workflow_dispatch:
-
-permissions:
-  id-token: write
-  contents: read
-
-env:
-  RG: Core-Deploy
-  IMAGE_TAG: ${{ github.sha }}
+  push:
+    branches:
+      - main
+    paths:
+      - "lending-service/**"
+      - "deploy/azure-vm/**"
+      - ".github/workflows/deploy-lending-service.yml"
+      - ".github/workflows/deploy-vm-service.yml"
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-      packages: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Azure login (OIDC)
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Enable Container Apps extension
-        run: az extension add --name containerapp --upgrade
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ secrets.GHCR_USERNAME }}
-          password: ${{ secrets.GHCR_PASSWORD }}
-
-      - name: Compute lending-service image
-        id: image
-        run: |
-          OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
-          echo "image=ghcr.io/${OWNER_LOWER}/lending-service:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push lending-service image
-        env:
-          IMAGE: ${{ steps.image.outputs.image }}
-        run: |
-          docker build -t "$IMAGE" ./lending-service
-          docker push "$IMAGE"
-
-      - name: Authorize lending-service container app
-        run: |
-          az containerapp registry set \
-            --name lending-service \
-            --resource-group $RG \
-            --server ghcr.io \
-            --username ${{ secrets.GHCR_USERNAME }} \
-            --password ${{ secrets.GHCR_PASSWORD }}
-
-      - name: Resolve execution-service FQDN
-        id: exec_fqdn
-        run: |
-          FQDN=$(az containerapp show \
-            --name execution-service \
-            --resource-group $RG \
-            --query properties.configuration.ingress.fqdn -o tsv)
-          echo "url=https://${FQDN}" >> "$GITHUB_OUTPUT"
-
-      - name: Deploy lending-service
-        env:
-          IMAGE: ${{ steps.image.outputs.image }}
-          EXEC_URL: ${{ steps.exec_fqdn.outputs.url }}
-        run: |
-          az containerapp update \
-            --name lending-service \
-            --resource-group $RG \
-            --image "$IMAGE" \
-            --set-env-vars PORT=3001 EXECUTION_LAYER_URL="$EXEC_URL"
-
-      - name: Wait for latest revision ready
-        run: |
-          set -euo pipefail
-          for attempt in 1 2 3 4 5 6 7 8; do
-            latest_revision="$(az containerapp show --name lending-service --resource-group "$RG" --query properties.latestRevisionName -o tsv)"
-            latest_ready_revision="$(az containerapp show --name lending-service --resource-group "$RG" --query properties.latestReadyRevisionName -o tsv)"
-            echo "latestRevisionName=${latest_revision}"
-            echo "latestReadyRevisionName=${latest_ready_revision}"
-
-            if [ -n "${latest_revision}" ] && [ "${latest_revision}" = "${latest_ready_revision}" ]; then
-              echo "Latest revision is ready."
-              exit 0
-            fi
-
-            if [ "$attempt" -eq 8 ]; then
-              echo "Latest revision did not become ready in time."
-              exit 1
-            fi
-
-            sleep 15
-          done
-
-      - name: Smoke test normalized lending routes
-        run: |
-          set -euo pipefail
-
-          DUMMY_ADDRESS="0x1111111111111111111111111111111111111111"
-          FQDN="$(az containerapp show --name lending-service --resource-group "$RG" --query properties.configuration.ingress.fqdn -o tsv)"
-          if [ -z "${FQDN:-}" ]; then
-            echo "Could not resolve lending-service FQDN"
-            exit 1
-          fi
-          BASE_URL="https://${FQDN}"
-          echo "Smoke target: ${BASE_URL}"
-
-          for attempt in 1 2 3; do
-            echo "Smoke attempt ${attempt}..."
-
-            markets_status="$(curl -sS -L --max-time 30 -o /tmp/lending_markets_body.txt -w '%{http_code}' "${BASE_URL}/benqi/markets")"
-            echo "MARKETS_STATUS=${markets_status}"
-            cat /tmp/lending_markets_body.txt || true
-
-            positions_status="$(curl -sS -L --max-time 30 -o /tmp/lending_positions_body.txt -w '%{http_code}' "${BASE_URL}/benqi/account/${DUMMY_ADDRESS}/positions")"
-            echo "POSITIONS_STATUS=${positions_status}"
-            cat /tmp/lending_positions_body.txt || true
-
-            if [ "${markets_status}" = "200" ] && [ "${positions_status}" != "404" ]; then
-              echo "Lending smoke test passed."
-              exit 0
-            fi
-
-            if [ "$attempt" -eq 3 ]; then
-              echo "Lending smoke test failed after retries."
-              exit 1
-            fi
-
-            sleep 15
-          done
+    uses: ./.github/workflows/deploy-vm-service.yml
+    with:
+      service_name: lending-service
+      compose_service: lending_service
+      docker_context: ./lending-service
+      dockerfile: ./lending-service/Dockerfile
+    secrets: inherit
