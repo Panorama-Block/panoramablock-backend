@@ -1,0 +1,20 @@
+project_name              = "panorama"
+environment               = "dev"
+location                  = "East US"
+resource_group_name       = "rg-panorama-dev"
+vm_size                   = "Standard_B1ms"
+vm_admin_username         = "azureuser"
+vm_admin_ssh_public_key   = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI..."
+postgres_admin_username   = "pgadmin"
+postgres_admin_password   = "replace-me"
+deployment_principal_object_id = "00000000-0000-0000-0000-000000000000"
+
+initial_key_vault_secrets = {
+  app-domain          = "api.example.com"
+  ghcr-username       = "example-user"
+  ghcr-password       = "ghp_xxx"
+  postgres-app-user   = "panorama_app"
+  postgres-app-pass   = "replace-me"
+  jwt-secret          = "replace-me"
+  thirdweb-secret-key = "replace-me"
+}

@@ -8,7 +8,7 @@ import { PreparedSwap } from "../../domain/ports/swap.provider.port";
 const BASE_CHAIN_ID = 8453;
 
 const PROVIDER_ALIAS_PRIORITY: Record<string, string[]> = {
-  uniswap: ["uniswap-smart-router", "uniswap-trading-api"],
+  uniswap: ["uniswap-trading-api"],
 };
 
 /**

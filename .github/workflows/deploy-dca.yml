@@ -2,13 +2,6 @@ name: Deploy DCA Service
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'dca-service/**'
-      - 'infra/container-apps/dca-service.yaml'
-      - '.github/workflows/deploy-dca.yml'
 
 permissions:
   id-token: write

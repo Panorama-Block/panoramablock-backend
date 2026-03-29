@@ -2,12 +2,6 @@ name: Deploy Lending Service
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'lending-service/**'
-      - '.github/workflows/deploy-lending-service.yml'
 
 permissions:
   id-token: write
