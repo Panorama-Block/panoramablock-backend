@@ -87,7 +87,12 @@ if [[ -f "${CADDY_SOURCE}" ]]; then
   render_caddyfile "${CADDY_SOURCE}" "${CADDY_RENDERED}"
   sudo install -m 0644 "${CADDY_RENDERED}" /etc/caddy/Caddyfile
   sudo caddy validate --config /etc/caddy/Caddyfile
-  sudo systemctl reload caddy
+  sudo systemctl enable caddy
+  if sudo systemctl is-active --quiet caddy; then
+    sudo systemctl reload caddy
+  else
+    sudo systemctl start caddy
+  fi
 fi
 
 TARGET_SERVICES=("$@")
