@@ -44,7 +44,11 @@ runcmd:
   - bash -lc "curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list"
   - bash -lc "curl -sL https://aka.ms/InstallAzureCLIDeb | bash"
   - apt-get update
+  - bash -lc "getent group caddy >/dev/null || groupadd --system caddy"
+  - bash -lc "id -u caddy >/dev/null 2>&1 || useradd --system --gid caddy --create-home --home-dir /var/lib/caddy --shell /usr/sbin/nologin --comment 'Caddy web server' caddy"
   - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin caddy
+  - install -d -o caddy -g caddy /var/lib/caddy
+  - install -d -o caddy -g caddy /var/log/caddy
   - systemctl enable docker
   - systemctl restart docker
   - systemctl enable caddy
