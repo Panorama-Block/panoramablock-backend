@@ -15,6 +15,9 @@ on:
       dockerfile:
         required: true
         type: string
+      execution_service_image:
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -32,6 +35,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve execution-service image
+        id: execution_image
+        env:
+          INPUT_EXECUTION_SERVICE_IMAGE: ${{ inputs.execution_service_image }}
+          VAR_EXECUTION_SERVICE_IMAGE: ${{ vars.EXECUTION_SERVICE_IMAGE }}
+          SECRET_EXECUTION_SERVICE_IMAGE: ${{ secrets.EXECUTION_SERVICE_IMAGE }}
+        run: |
+          set -euo pipefail
+
+          EXECUTION_IMAGE="${INPUT_EXECUTION_SERVICE_IMAGE:-}"
+          if [[ -z "${EXECUTION_IMAGE}" ]]; then
+            EXECUTION_IMAGE="${VAR_EXECUTION_SERVICE_IMAGE:-}"
+          fi
+          if [[ -z "${EXECUTION_IMAGE}" ]]; then
+            EXECUTION_IMAGE="${SECRET_EXECUTION_SERVICE_IMAGE:-}"
+          fi
+          if [[ -z "${EXECUTION_IMAGE}" ]]; then
+            EXECUTION_IMAGE="ghcr.io/panorama-block/execution-service:latest"
+          fi
+
+          echo "image=${EXECUTION_IMAGE}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/login-action@v3
         with:
@@ -74,7 +99,7 @@ jobs:
           GHCR_USERNAME=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name ghcr-username --query value -o tsv)
           GHCR_PASSWORD=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name ghcr-password --query value -o tsv)
           IMAGE_TAG=${IMAGE_TAG}
-          EXECUTION_SERVICE_IMAGE=${GHCR_REGISTRY}/${{ steps.image.outputs.namespace }}/execution-service:latest
+          EXECUTION_SERVICE_IMAGE=${{ steps.execution_image.outputs.image }}
           NODE_ENV=production
           LOG_LEVEL=info
           POSTGRES_HOST=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-host --query value -o tsv)
