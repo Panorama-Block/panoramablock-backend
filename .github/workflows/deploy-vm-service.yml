@@ -111,6 +111,7 @@ jobs:
           REDIS_URL=redis://:$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name redis-pass --query value -o tsv)@redis:6379
           THIRDWEB_CLIENT_ID=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name thirdweb-client-id --query value -o tsv)
           THIRDWEB_SECRET_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name thirdweb-secret-key --query value -o tsv)
+          THIRDWEB_API_SECRET_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name thirdweb-api-secret-key --query value -o tsv)
           ENGINE_ACCESS_TOKEN=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name engine-access-token --query value -o tsv)
           ADMIN_WALLET_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name admin-wallet-address --query value -o tsv)
           ENCRYPTION_PASSWORD=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name encryption-password --query value -o tsv)
