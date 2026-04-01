@@ -1,0 +1,23 @@
+name: Deploy Liquid Swap To VM
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "liquid-swap-service/**"
+      - "shared/token-registry.json"
+      - "deploy/azure-vm/**"
+      - ".github/workflows/deploy-vm-liquid-swap.yml"
+      - ".github/workflows/deploy-vm-service.yml"
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-vm-service.yml
+    with:
+      service_name: liquid-swap
+      compose_service: liquid_swap_service
+      docker_context: .
+      dockerfile: ./liquid-swap-service/Dockerfile
+    secrets: inherit

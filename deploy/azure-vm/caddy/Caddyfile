@@ -40,6 +40,14 @@
 		reverse_proxy 127.0.0.1:3010
 	}
 
+	handle_path /database* {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	handle_path /api/database* {
+		reverse_proxy 127.0.0.1:8080
+	}
+
 	@execution path /execution* /api/execution*
 	handle @execution {
 		reverse_proxy 127.0.0.1:3011

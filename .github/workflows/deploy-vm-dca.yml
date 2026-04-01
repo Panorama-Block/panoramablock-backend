@@ -1,0 +1,22 @@
+name: Deploy DCA Service To VM
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "dca-service/**"
+      - "deploy/azure-vm/**"
+      - ".github/workflows/deploy-vm-dca.yml"
+      - ".github/workflows/deploy-vm-service.yml"
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-vm-service.yml
+    with:
+      service_name: dca-service
+      compose_service: dca_service
+      docker_context: ./dca-service
+      dockerfile: ./dca-service/Dockerfile
+    secrets: inherit

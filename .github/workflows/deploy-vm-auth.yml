@@ -1,0 +1,22 @@
+name: Deploy Auth Service To VM
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "auth-service/**"
+      - "deploy/azure-vm/**"
+      - ".github/workflows/deploy-vm-auth.yml"
+      - ".github/workflows/deploy-vm-service.yml"
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-vm-service.yml
+    with:
+      service_name: auth-service
+      compose_service: auth_service
+      docker_context: ./auth-service
+      dockerfile: ./auth-service/Dockerfile
+    secrets: inherit

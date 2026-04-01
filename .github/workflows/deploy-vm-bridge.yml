@@ -1,0 +1,23 @@
+name: Deploy Bridge Service To VM
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "bridge-service/**"
+      - "shared/token-registry.json"
+      - "deploy/azure-vm/**"
+      - ".github/workflows/deploy-vm-bridge.yml"
+      - ".github/workflows/deploy-vm-service.yml"
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-vm-service.yml
+    with:
+      service_name: bridge-service
+      compose_service: bridge_service
+      docker_context: ./bridge-service
+      dockerfile: ./bridge-service/Dockerfile
+    secrets: inherit

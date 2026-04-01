@@ -66,6 +66,9 @@ jobs:
           - name: diagram-service
             context: ./diagram-service
             dockerfile: ./diagram-service/Dockerfile
+          - name: database-gateway
+            context: ./database
+            dockerfile: ./database/Dockerfile
           - name: lending-service
             context: ./lending-service
             dockerfile: ./lending-service/Dockerfile
@@ -143,6 +146,11 @@ jobs:
           REDIS_HOST=redis
           REDIS_PORT=6379
           REDIS_URL=redis://:$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name redis-pass --query value -o tsv)@redis:6379
+          DB_GATEWAY_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name db-gateway-url --query value -o tsv)
+          DB_GATEWAY_SERVICE_TOKEN=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name db-gateway-service-token --query value -o tsv)
+          DB_GATEWAY_TENANT_ID=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name db-gateway-tenant-id --query value -o tsv)
+          DB_GATEWAY_SYNC_ENABLED=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name db-gateway-sync-enabled --query value -o tsv)
+          DB_GATEWAY_TIMEOUT_MS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name db-gateway-timeout-ms --query value -o tsv)
           THIRDWEB_CLIENT_ID=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name thirdweb-client-id --query value -o tsv)
           THIRDWEB_SECRET_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name thirdweb-secret-key --query value -o tsv)
           THIRDWEB_API_SECRET_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name thirdweb-api-secret-key --query value -o tsv)
@@ -210,7 +218,24 @@ jobs:
               "$POSTGRES_HOST" \
               "$POSTGRES_ADMIN_USER" \
               "$POSTGRES_ADMIN_PASSWORD" \
-              panorama_core panorama_dca tac_service panorama_lido
+              panorama_core panorama_dca tac_service panorama_lido panorama_data_gateway
+
+      - name: Run database gateway migrations
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            cd ${{ env.DEPLOY_PATH }}
+            set -a
+            source .env.production
+            set +a
+            docker pull "${GHCR_REGISTRY}/${{ steps.meta.outputs.namespace }}/database-gateway:${IMAGE_TAG}"
+            docker run --rm \
+              -e DATABASE_URL="postgresql://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@${POSTGRES_HOST}:5432/panorama_data_gateway?sslmode=require" \
+              "${GHCR_REGISTRY}/${{ steps.meta.outputs.namespace }}/database-gateway:${IMAGE_TAG}" \
+              npm run migrate:deploy
 
       - name: Pull latest images and restart stack
         uses: appleboy/ssh-action@v1.2.0
