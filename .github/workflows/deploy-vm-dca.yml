@@ -2,14 +2,6 @@ name: Deploy DCA Service To VM
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "dca-service/**"
-      - "deploy/azure-vm/**"
-      - ".github/workflows/deploy-vm-dca.yml"
-      - ".github/workflows/deploy-vm-service.yml"
 
 permissions:
   contents: read
