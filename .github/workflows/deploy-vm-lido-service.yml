@@ -2,14 +2,6 @@ name: Deploy Lido Service To VM
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "lido-service/**"
-      - "deploy/azure-vm/**"
-      - ".github/workflows/deploy-vm-lido-service.yml"
-      - ".github/workflows/deploy-vm-service.yml"
 
 permissions:
   contents: read

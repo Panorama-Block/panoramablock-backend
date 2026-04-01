@@ -2,14 +2,6 @@ name: Deploy Auth Service To VM
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "auth-service/**"
-      - "deploy/azure-vm/**"
-      - ".github/workflows/deploy-vm-auth.yml"
-      - ".github/workflows/deploy-vm-service.yml"
 
 permissions:
   contents: read
