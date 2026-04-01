@@ -1,0 +1,22 @@
+name: Deploy Lido Service To VM
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "lido-service/**"
+      - "deploy/azure-vm/**"
+      - ".github/workflows/deploy-vm-lido-service.yml"
+      - ".github/workflows/deploy-vm-service.yml"
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-vm-service.yml
+    with:
+      service_name: lido-service
+      compose_service: lido_service
+      docker_context: ./lido-service
+      dockerfile: ./lido-service/Dockerfile
+    secrets: inherit
