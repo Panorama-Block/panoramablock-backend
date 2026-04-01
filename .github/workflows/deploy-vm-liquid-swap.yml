@@ -2,15 +2,6 @@ name: Deploy Liquid Swap To VM
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "liquid-swap-service/**"
-      - "shared/token-registry.json"
-      - "deploy/azure-vm/**"
-      - ".github/workflows/deploy-vm-liquid-swap.yml"
-      - ".github/workflows/deploy-vm-service.yml"
 
 permissions:
   contents: read

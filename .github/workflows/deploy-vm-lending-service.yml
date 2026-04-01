@@ -2,14 +2,6 @@ name: Deploy Lending Service To VM
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "lending-service/**"
-      - "deploy/azure-vm/**"
-      - ".github/workflows/deploy-vm-lending-service.yml"
-      - ".github/workflows/deploy-vm-service.yml"
 
 permissions:
   contents: read

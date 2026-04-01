@@ -226,6 +226,7 @@ jobs:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
+          envs: POSTGRES_ADMIN_USER,POSTGRES_ADMIN_PASSWORD
           script: |
             cd ${{ env.DEPLOY_PATH }}
             set -a
