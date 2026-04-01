@@ -1,4 +1,4 @@
-name: Deploy Diagram Service
+name: Deploy Diagram Service To VM
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ on:
     paths:
       - "diagram-service/**"
       - "deploy/azure-vm/**"
-      - ".github/workflows/deploy-diagram-service.yml"
+      - ".github/workflows/deploy-vm-diagram-service.yml"
       - ".github/workflows/deploy-vm-service.yml"
 
 jobs:

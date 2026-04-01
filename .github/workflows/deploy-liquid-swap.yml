@@ -2,22 +2,81 @@ name: Deploy Liquid Swap
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "liquid-swap-service/**"
-      - "shared/token-registry.json"
-      - "deploy/azure-vm/**"
-      - ".github/workflows/deploy-liquid-swap.yml"
-      - ".github/workflows/deploy-vm-service.yml"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  RG: Core-Deploy
+  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
   deploy:
-    uses: ./.github/workflows/deploy-vm-service.yml
-    with:
-      service_name: liquid-swap
-      compose_service: liquid_swap_service
-      docker_context: .
-      dockerfile: ./liquid-swap-service/Dockerfile
-    secrets: inherit
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Enable Container Apps extension
+        run: az extension add --name containerapp --upgrade
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_PASSWORD }}
+
+      - name: Compute liquid swap image
+        id: image
+        run: |
+          OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          echo "image=ghcr.io/${OWNER_LOWER}/liquid-swap:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push liquid-swap image
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          docker build -t "$IMAGE" -f liquid-swap-service/Dockerfile .
+          docker push "$IMAGE"
+
+      - name: Authorize liquid-swap container app
+        run: |
+          az containerapp registry set \
+            --name liquid-swap \
+            --resource-group $RG \
+            --server ghcr.io \
+            --username ${{ secrets.GHCR_USERNAME }} \
+            --password ${{ secrets.GHCR_PASSWORD }}
+
+      - name: Resolve execution-service FQDN
+        id: exec_fqdn
+        run: |
+          FQDN=$(az containerapp show \
+            --name execution-service \
+            --resource-group $RG \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "url=https://${FQDN}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy liquid-swap
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+          EXEC_URL: ${{ steps.exec_fqdn.outputs.url }}
+        run: |
+          az containerapp update \
+            --name liquid-swap \
+            --resource-group $RG \
+            --image "$IMAGE" \
+            --set-env-vars EXECUTION_LAYER_URL="$EXEC_URL"
