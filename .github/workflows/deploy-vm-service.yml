@@ -197,7 +197,7 @@ jobs:
             set +a
             docker pull "${{ steps.image.outputs.image }}"
             docker run --rm \
-              -e DATABASE_URL="postgresql://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@${POSTGRES_HOST}:5432/panorama_data_gateway?sslmode=require" \
+              -e DATABASE_URL="postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@${POSTGRES_HOST}:5432/panorama_data_gateway?sslmode=require" \
               "${{ steps.image.outputs.image }}" \
               npm run migrate:deploy
 

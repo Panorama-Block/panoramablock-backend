@@ -233,7 +233,7 @@ jobs:
             set +a
             docker pull "${GHCR_REGISTRY}/${{ steps.meta.outputs.namespace }}/database-gateway:${IMAGE_TAG}"
             docker run --rm \
-              -e DATABASE_URL="postgresql://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@${POSTGRES_HOST}:5432/panorama_data_gateway?sslmode=require" \
+              -e DATABASE_URL="postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@${POSTGRES_HOST}:5432/panorama_data_gateway?sslmode=require" \
               "${GHCR_REGISTRY}/${{ steps.meta.outputs.namespace }}/database-gateway:${IMAGE_TAG}" \
               npm run migrate:deploy
 
