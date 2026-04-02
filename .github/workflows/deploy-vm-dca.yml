@@ -1,0 +1,19 @@
+name: Deploy DCA Service To VM
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-vm-service.yml
+    with:
+      service_name: dca-service
+      compose_service: dca_service
+      docker_context: ./dca-service
+      dockerfile: ./dca-service/Dockerfile
+    secrets: inherit

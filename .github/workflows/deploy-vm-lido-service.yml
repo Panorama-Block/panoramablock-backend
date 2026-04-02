@@ -1,0 +1,19 @@
+name: Deploy Lido Service To VM
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-vm-service.yml
+    with:
+      service_name: lido-service
+      compose_service: lido_service
+      docker_context: ./lido-service
+      dockerfile: ./lido-service/Dockerfile
+    secrets: inherit

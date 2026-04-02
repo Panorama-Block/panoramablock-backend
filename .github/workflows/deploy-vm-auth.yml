@@ -1,0 +1,19 @@
+name: Deploy Auth Service To VM
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-vm-service.yml
+    with:
+      service_name: auth-service
+      compose_service: auth_service
+      docker_context: ./auth-service
+      dockerfile: ./auth-service/Dockerfile
+    secrets: inherit

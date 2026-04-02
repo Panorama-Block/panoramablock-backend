@@ -1,0 +1,19 @@
+name: Deploy Lending Service To VM
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-vm-service.yml
+    with:
+      service_name: lending-service
+      compose_service: lending_service
+      docker_context: ./lending-service
+      dockerfile: ./lending-service/Dockerfile
+    secrets: inherit

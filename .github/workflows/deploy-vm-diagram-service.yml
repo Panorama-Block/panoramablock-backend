@@ -1,15 +1,12 @@
-name: Deploy Diagram Service
+name: Deploy Diagram Service To VM
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "diagram-service/**"
-      - "deploy/azure-vm/**"
-      - ".github/workflows/deploy-diagram-service.yml"
-      - ".github/workflows/deploy-vm-service.yml"
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
 
 jobs:
   deploy:

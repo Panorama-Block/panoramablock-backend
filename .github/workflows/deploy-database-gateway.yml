@@ -7,86 +7,19 @@ on:
       - main
     paths:
       - 'database/**'
-      - 'infra/container-apps/database-gateway.yaml'
       - '.github/workflows/deploy-database-gateway.yml'
-
-permissions:
-  id-token: write
-  contents: read
-
-env:
-  RG: Core-Deploy
-  IMAGE_TAG: ${{ github.sha }}
+      - '.github/workflows/deploy-vm-service.yml'
+      - 'deploy/azure-vm/**'
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    uses: ./.github/workflows/deploy-vm-service.yml
     permissions:
       id-token: write
       contents: read
       packages: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Azure login (OIDC)
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Enable Container Apps extension
-        run: az extension add --name containerapp --upgrade
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ secrets.GHCR_USERNAME }}
-          password: ${{ secrets.GHCR_PASSWORD }}
-
-      - name: Compute database gateway image
-        id: image
-        run: |
-          OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
-          echo "image=ghcr.io/${OWNER_LOWER}/database-gateway:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-
-      - name: Build database gateway image
-        env:
-          IMAGE: ${{ steps.image.outputs.image }}
-        run: |
-          docker build -t "$IMAGE" ./database
-
-      - name: Install dependencies for migrations
-        working-directory: database
-        run: npm ci
-
-      - name: Run Prisma migrations on Azure
-        working-directory: database
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: npx prisma migrate deploy
-
-      - name: Push database gateway image
-        env:
-          IMAGE: ${{ steps.image.outputs.image }}
-        run: docker push "$IMAGE"
-
-      - name: Authorize gateway-database container app
-        run: |
-          az containerapp registry set \
-            --name gateway-database \
-            --resource-group $RG \
-            --server ghcr.io \
-            --username ${{ secrets.GHCR_USERNAME }} \
-            --password ${{ secrets.GHCR_PASSWORD }}
-
-      - name: Deploy gateway-database
-        env:
-          IMAGE: ${{ steps.image.outputs.image }}
-        run: |
-          az containerapp update \
-            --name gateway-database \
-            --resource-group $RG \
-            --image "$IMAGE"
+    with:
+      service_name: database-gateway
+      compose_service: database_gateway
+      docker_context: ./database
+      dockerfile: ./database/Dockerfile
