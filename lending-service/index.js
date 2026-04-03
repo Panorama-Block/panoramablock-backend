@@ -226,12 +226,18 @@ app.get('/config', (req, res) => {
 // (benqi/markets, benqi/account, benqi-validation/*, liquid-staking/*)
 app.use('/', executionLayerRoutes);
 
+// Cloud gateways may forward with a /lending prefix without stripping it.
+// Mount the same routes under /lending so both /benqi/* and /lending/benqi/* work.
+app.use('/lending', executionLayerRoutes);
+
 app.use('/dex', traderJoeRoutes);
 app.use('/validation', validationRoutes);
 app.use('/validation-swap', validationSwapRoutes);
 // Legacy benqi routes remain as fallback if execution layer is down
 app.use('/benqi', benqiRoutes);
+app.use('/lending/benqi', benqiRoutes);
 app.use('/benqi-validation', benqiValidationRoutes);
+app.use('/lending/benqi-validation', benqiValidationRoutes);
 
 // Middleware de tratamento de erros
 app.use((err, req, res, next) => {

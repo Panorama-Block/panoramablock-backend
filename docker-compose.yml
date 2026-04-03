@@ -1,0 +1,363 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: panorama-redis
+    command: ["redis-server", "--requirepass", "${REDIS_PASS}"]
+    environment:
+      REDIS_PASS: ${REDIS_PASS}
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+
+  # --- NOVO: Postgres para o Engine ---
+  engine_postgres:
+    image: postgres:14
+    container_name: panorama-engine-postgres
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    # Porta externa opcional (5433) para não dar conflito
+    ports:
+      - "5433:5432"
+    volumes:
+      - engine_pgdata:/var/lib/postgresql/data
+      - ./bridge-service/database/tac-bootstrap.sql:/docker-entrypoint-initdb.d/10-tac-bootstrap.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Ensure app roles/databases exist even when the Postgres volume is already initialized
+  # (docker-entrypoint init scripts only run on the very first boot).
+  engine_postgres_bootstrap:
+    image: postgres:14
+    container_name: panorama-engine-postgres-bootstrap
+    depends_on:
+      engine_postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - ./bridge-service/database/tac-bootstrap.sql:/bootstrap/tac-bootstrap.sql:ro
+    command: >
+      bash -lc "
+        set -euo pipefail;
+        echo '[engine_postgres_bootstrap] Waiting for engine_postgres...';
+        until psql -h engine_postgres -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres} -c 'SELECT 1' >/dev/null 2>&1; do
+          sleep 1;
+        done;
+        echo '[engine_postgres_bootstrap] Applying tac-bootstrap.sql...';
+        psql -h engine_postgres -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres} -v ON_ERROR_STOP=1 -f /bootstrap/tac-bootstrap.sql;
+        echo '[engine_postgres_bootstrap] Creating panorama_db if not exists...';
+        psql -h engine_postgres -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres} -tc \"SELECT 1 FROM pg_database WHERE datname = 'panorama_db'\" | grep -q 1 || psql -h engine_postgres -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres} -c 'CREATE DATABASE panorama_db';
+        echo '[engine_postgres_bootstrap] Bootstrap finished.'
+      "
+    restart: "no"
+
+  # --- NOVO: thirdweb Engine (self-host) ---
+  engine:
+    image: thirdweb/engine:latest
+    container_name: thirdweb-engine
+    depends_on:
+      engine_postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      # 🔐 Essenciais
+      THIRDWEB_API_SECRET_KEY: ${THIRDWEB_SECRET_KEY}
+      ADMIN_WALLET_ADDRESS: ${ADMIN_WALLET_ADDRESS}
+      ENCRYPTION_PASSWORD: ${ENCRYPTION_PASSWORD}
+
+      # 💾 DB & Cache (usa serviços do compose)
+      POSTGRES_CONNECTION_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@engine_postgres:5432/${POSTGRES_DB:-postgres}?sslmode=disable
+      REDIS_URL: redis://:${REDIS_PASS}@redis:6379
+
+      # ⚙️ Opções
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      PORT: ${ENGINE_PORT:-3005}
+      # ENTRYPOINT_VERSION: v0_6  # descomente se necessário para sua smart wallet
+
+    ports:
+      - "${ENGINE_PORT:-3005}:3005"
+    restart: unless-stopped
+
+  auth_service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: panorama-auth-service
+    ports:
+      - "${AUTH_PORT}:3001"
+    environment:
+      - PORT=3001
+      - NODE_ENV=${NODE_ENV}
+      - DEBUG=${DEBUG}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASS=${REDIS_PASS}
+      - AUTH_DOMAIN=${AUTH_DOMAIN}
+      - AUTH_PRIVATE_KEY=${AUTH_PRIVATE_KEY}
+      - THIRDWEB_CLIENT_ID=${THIRDWEB_CLIENT_ID}
+      - TON_JWT_SECRET=${TON_JWT_SECRET}
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_started
+    restart: always
+
+  bridge_service:
+    build:
+      context: ./bridge-service
+      dockerfile: Dockerfile
+    container_name: panorama-bridge-service
+    ports:
+      - "${BRIDGE_PORT:-3003}:3005"
+    environment:
+      - PORT=3005
+      - NODE_ENV=${NODE_ENV}
+      - DEBUG=${DEBUG}
+      - LAYERSWAP_API_KEY=${LAYERSWAP_API_KEY}
+      - DATABASE_URL=postgresql://tac_service:tac_service_password@engine_postgres:5432/tac_service?schema=public
+      - LAYERSWAP_TON_VAULT=${LAYERSWAP_TON_VAULT}
+      - TOKEN_REGISTRY_PATH=/app/shared/token-registry.json
+    env_file:
+      - .env
+    depends_on:
+      engine_postgres:
+        condition: service_healthy
+      engine_postgres_bootstrap:
+        condition: service_completed_successfully
+    restart: always
+    volumes:
+      - ./shared/token-registry.json:/app/shared/token-registry.json:ro
+
+
+  liquid_swap_service:
+    build:
+      context: .
+      dockerfile: liquid-swap-service/Dockerfile
+    container_name: panorama-liquid-swap
+    ports:
+      - "${LIQUID_SWAP_PORT}:3002"
+    environment:
+      - PORT=3002
+      - NODE_ENV=${NODE_ENV}
+      - DEBUG=${DEBUG}
+      - AUTH_SERVICE_URL=http://auth_service:3001
+      - THIRDWEB_CLIENT_ID=${THIRDWEB_CLIENT_ID}
+      - PRIVATE_KEY=${PRIVATE_KEY}
+      - SWAP_SENDER_ADDRESS=${SWAP_SENDER_ADDRESS}
+      - SWAP_RECEIVER_ADDRESS=${SWAP_RECEIVER_ADDRESS}
+      - X_RANGO_ID=${X_RANGO_ID}
+      - RPC_URL=${RPC_URL}
+      - ETHEREUM_RPC_URL=${ETHEREUM_RPC_URL}
+      - POLYGON_RPC_URL=${POLYGON_RPC_URL}
+      - BSC_RPC_URL=${BSC_RPC_URL}
+      - BASE_RPC_URL=${BASE_RPC_URL}
+      - OPTIMISM_RPC_URL=${OPTIMISM_RPC_URL}
+      - ARBITRUM_RPC_URL=${ARBITRUM_RPC_URL}
+      # >>> NOVO: URL interna para falar com o Engine
+      - ENGINE_URL=http://engine:3005
+      - ENGINE_ENABLED=${ENGINE_ENABLED}
+      - TOKEN_REGISTRY_PATH=/app/shared/token-registry.json
+      # Execution Layer (Aerodrome/TraderJoe smart contracts)
+      - EXECUTION_LAYER_URL=http://execution_service:3010
+      - EXECUTION_SERVICE_URL=http://execution_service:3010
+    env_file:
+      - .env
+    depends_on:
+      auth_service:
+        condition: service_started
+      engine:
+        condition: service_started
+      execution_service:
+        condition: service_started
+    restart: always
+    volumes:
+      - ./shared/token-registry.json:/app/shared/token-registry.json:ro
+
+  lido_service:
+    build:
+      context: ./lido-service
+      dockerfile: Dockerfile
+    container_name: panorama-lido-service
+    ports:
+      - "${LIDO_PORT:-3004}:3004"
+    environment:
+      - PORT=3004
+      - NODE_ENV=${NODE_ENV}
+      - DEBUG=${DEBUG}
+      - AUTH_SERVICE_URL=http://auth_service:3001
+      - THIRDWEB_CLIENT_ID=${THIRDWEB_CLIENT_ID}
+      - THIRDWEB_SECRET_KEY=${THIRDWEB_SECRET_KEY}
+      - ETHEREUM_RPC_URL=${ETHEREUM_RPC_URL}
+      - RPC_URL=${RPC_URL}
+      # Persistence (optional): store positions/tx/history in Postgres
+      - DATABASE_URL=${LIDO_DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@engine_postgres:5432/${POSTGRES_DB:-postgres}}
+      # Optional: isolate Lido tables in a dedicated schema in the same database
+      - LIDO_DB_SCHEMA=${LIDO_DB_SCHEMA:-lido}
+      # Engine configuration (for ERC-4337 execution)
+      - ENGINE_URL=http://engine:3005
+      - ENGINE_ENABLED=${ENGINE_ENABLED}
+      - ENGINE_ACCESS_TOKEN=${ENGINE_ACCESS_TOKEN}
+      - ADMIN_WALLET_ADDRESS=${ADMIN_WALLET_ADDRESS}
+    env_file:
+      - .env
+    depends_on:
+      auth_service:
+        condition: service_started
+      engine:
+        condition: service_started
+    restart: always
+
+  lending_service:
+    build:
+      context: ./lending-service
+      dockerfile: Dockerfile
+    container_name: panorama-lending-service
+    ports:
+      - "${LENDING_PORT:-3007}:3007"
+    environment:
+      - PORT=3007
+      - NODE_ENV=${NODE_ENV}
+      - DEBUG=${DEBUG}
+      - AUTH_SERVICE_URL=http://auth_service:3001
+      - THIRDWEB_CLIENT_ID=${THIRDWEB_CLIENT_ID}
+      - THIRDWEB_SECRET_KEY=${THIRDWEB_SECRET_KEY}
+      - AVALANCHE_RPC_URL=${AVALANCHE_RPC_URL}
+      - RPC_URL=${RPC_URL}
+      - VALIDATION_CONTRACT_ADDRESS=${VALIDATION_CONTRACT_ADDRESS:-0x8513be0BD39c8B7d693A678ae2350Ffaa284E3cf}
+      - EXECUTION_LAYER_URL=http://execution_service:3010
+      # Engine configuration (for ERC-4337 execution)
+      - ENGINE_URL=http://engine:3005
+      - ENGINE_ENABLED=${ENGINE_ENABLED}
+      - ENGINE_ACCESS_TOKEN=${ENGINE_ACCESS_TOKEN}
+      - ADMIN_WALLET_ADDRESS=${ADMIN_WALLET_ADDRESS}
+    env_file:
+      - .env
+    depends_on:
+      auth_service:
+        condition: service_started
+      engine:
+        condition: service_started
+      execution_service:
+        condition: service_started
+    restart: always
+
+  dca_service:
+    build:
+      context: ./dca-service
+      dockerfile: Dockerfile
+    container_name: panorama-dca-service
+    ports:
+      - "${DCA_PORT:-3008}:3007"
+    environment:
+      - DCA_PORT=3007
+      - NODE_ENV=${NODE_ENV}
+      - DEBUG=${DEBUG}
+      - AUTH_SERVICE_URL=http://auth_service:3001
+      - THIRDWEB_CLIENT_ID=${THIRDWEB_CLIENT_ID}
+      - THIRDWEB_SECRET_KEY=${THIRDWEB_SECRET_KEY}
+      - ENCRYPTION_PASSWORD=${ENCRYPTION_PASSWORD}
+      # Database (uses shared postgres)
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@engine_postgres:5432/panorama_dca
+      - DB_HOST=engine_postgres
+      - DB_PORT=5432
+      - DB_NAME=panorama_dca
+      - DB_USER=${POSTGRES_USER:-postgres}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      # Redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASS=${REDIS_PASS}
+      # Engine configuration (for ERC-4337 execution)
+      - ENGINE_URL=http://engine:3005
+      - ENGINE_ENABLED=${ENGINE_ENABLED}
+      - ENGINE_ACCESS_TOKEN=${ENGINE_ACCESS_TOKEN}
+    env_file:
+      - .env
+    depends_on:
+      auth_service:
+        condition: service_started
+      engine:
+        condition: service_started
+      engine_postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: always
+
+  diagram_service:
+    build:
+      context: ./diagram-service
+      dockerfile: Dockerfile
+    container_name: panorama-diagram-service
+    ports:
+      - "${DIAGRAM_PORT:-3010}:3010"
+    environment:
+      - PORT=3010
+      - NODE_ENV=${NODE_ENV}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@engine_postgres:5432/${POSTGRES_DB:-postgres}?schema=public
+    env_file:
+      - .env
+    depends_on:
+      engine_postgres:
+        condition: service_healthy
+    restart: always
+
+  database_gateway:
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+    container_name: panorama-database-gateway
+    ports:
+      - "${DATABASE_GATEWAY_PORT:-8080}:8080"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@engine_postgres:5432/panorama_db?schema=public
+      - PORT=8080
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - JWT_SECRET=${JWT_SECRET:-changeme}
+    env_file:
+      - .env
+    command: sh -c "npx prisma migrate deploy && node dist/apps/gateway/src/main.js"
+    depends_on:
+      engine_postgres:
+        condition: service_healthy
+      engine_postgres_bootstrap:
+        condition: service_completed_successfully
+    restart: always
+
+  execution_service:
+    build:
+      context: ../panoramablock-execution-layer/backend
+      dockerfile: Dockerfile
+    container_name: panorama-execution-service
+    ports:
+      - "${EXECUTION_PORT:-3011}:3010"
+    environment:
+      - PORT=3010
+      - NODE_ENV=${NODE_ENV}
+      - DEBUG=${DEBUG}
+      - BASE_RPC_URL=${BASE_RPC_URL}
+      - EXECUTOR_ADDRESS=${EXECUTOR_ADDRESS:-0x7528861E7DD09dc9B1e5149542e897d984Ceda7f}
+      - AVAX_EXECUTOR_ADDRESS=${AVAX_EXECUTOR_ADDRESS:-0xc35059D1BC395Ff0F6fDcEA1b7F365E3aa7C1D12}
+      - AVAX_RPC_URL=${AVAX_RPC_URL:-https://api.avax.network/ext/bc/C/rpc}
+      - DCA_VAULT_ADDRESS=${DCA_VAULT_ADDRESS:-0x155eC4256cC6f11f3d4C21Af28a2a1CC31f730d1}
+      - ALLOWED_ORIGINS=http://localhost:7777,http://localhost:3000,http://localhost:3010
+    env_file:
+      - .env
+    restart: always
+
+volumes:
+  redis_data:
+  engine_pgdata:
