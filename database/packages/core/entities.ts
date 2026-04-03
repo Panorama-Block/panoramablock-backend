@@ -73,7 +73,7 @@ const entityConfigs: EntityConfig[] = [
   {
     collection: 'conversations',
     model: 'Conversation',
-    primaryKeys: ['id'],
+    primaryKeys: ['userId', 'conversationId'],
     tenantField: 'tenantId',
     defaultOrderBy: { createdAt: 'desc' },
     create: z

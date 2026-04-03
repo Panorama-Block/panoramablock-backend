@@ -163,7 +163,7 @@ const seedData = {
   ],
   conversations: [
     {
-      id: 'conv-1',
+      id: 'legacy-conv-row-id',
       userId: 'user-1',
       conversationId: 'conv-1',
       tenantId: 'tenant-test'
@@ -247,7 +247,7 @@ describe('Gateway HTTP API', () => {
 
   it('updates a conversation', async () => {
     const response = await request(app.server)
-      .patch('/v1/conversations/conv-1')
+      .patch('/v1/conversations/user-1:conv-1')
       .set('authorization', authHeader())
       .set('x-tenant-id', 'tenant-test')
       .set('idempotency-key', 'test-key-2')
@@ -255,5 +255,26 @@ describe('Gateway HTTP API', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.title).toBe('Updated title');
+    expect(response.body.id).toBe('user-1:conv-1');
+  });
+
+  it('normalizes conversation identifiers in get and list responses', async () => {
+    const getResponse = await request(app.server)
+      .get('/v1/conversations/user-1:conv-1')
+      .set('authorization', authHeader())
+      .set('x-tenant-id', 'tenant-test');
+
+    expect(getResponse.status).toBe(200);
+    expect(getResponse.body.id).toBe('user-1:conv-1');
+    expect(getResponse.body.userId).toBe('user-1');
+    expect(getResponse.body.conversationId).toBe('conv-1');
+
+    const listResponse = await request(app.server)
+      .get('/v1/conversations')
+      .set('authorization', authHeader())
+      .set('x-tenant-id', 'tenant-test');
+
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body.data[0].id).toBe('user-1:conv-1');
   });
 });

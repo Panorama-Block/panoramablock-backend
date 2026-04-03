@@ -5,6 +5,7 @@ import { entityConfigByCollection } from '../../../../../packages/core/entities.
 import { ValidationError } from '../../../../../packages/core/services/index.js';
 import { IdempotencyStore } from '../../../../../packages/infra-prisma/IdempotencyStore.js';
 import { persistIdempotentResponse } from '../middlewares/idempotency.js';
+import { normalizeGatewayRecord } from '../serialization.js';
 
 const transactSchema = z.object({
   ops: z
@@ -42,8 +43,11 @@ export const createTransactHandler = (
 
     try {
       const result = await repository.transact(payload.ops as any, request.ctx);
-      await persistIdempotentResponse(request, result, idempotencyStore);
-      reply.send({ data: result });
+      const normalized = result.map((item, index) =>
+        normalizeGatewayRecord(payload.ops[index]?.entity ?? '', item)
+      );
+      await persistIdempotentResponse(request, normalized, idempotencyStore);
+      reply.send({ data: normalized });
     } catch (err) {
       if (err instanceof ValidationError) {
         reply.status(400).send({ error: 'validation_error', message: err.message });
