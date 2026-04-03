@@ -6,6 +6,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from '../../../../../p
 import { ZodError } from 'zod';
 import { persistIdempotentResponse } from '../middlewares/idempotency.js';
 import { IdempotencyStore } from '../../../../../packages/infra-prisma/IdempotencyStore.js';
+import { normalizeGatewayListResponse, normalizeGatewayRecord } from '../serialization.js';
 
 interface EntityParams {
   entity: string;
@@ -38,7 +39,7 @@ export const createCrudHandlers = (
       }
 
       const result = await repository.list(entity, query, request.ctx);
-      reply.send(result);
+      reply.send(normalizeGatewayListResponse(entity, result));
     },
 
     get: async (request: FastifyRequest<{ Params: EntityParams }>, reply: FastifyReply) => {
@@ -54,7 +55,7 @@ export const createCrudHandlers = (
         reply.status(404).send({ error: 'not_found', message: `${config.collection} not found` });
         return;
       }
-      reply.send(result);
+      reply.send(normalizeGatewayRecord(entity, result));
     },
 
     create: async (request: FastifyRequest<{ Params: EntityParams }>, reply: FastifyReply) => {
@@ -64,8 +65,9 @@ export const createCrudHandlers = (
       try {
         const payload = config.create.parse(request.body);
         const result = await repository.create(entity, payload, request.ctx);
-        await persistIdempotentResponse(request, result, idempotencyStore);
-        reply.status(201).send(result);
+        const normalized = normalizeGatewayRecord(entity, result);
+        await persistIdempotentResponse(request, normalized, idempotencyStore);
+        reply.status(201).send(normalized);
       } catch (err) {
         handleError(err, reply, config.collection);
       }
@@ -82,8 +84,9 @@ export const createCrudHandlers = (
       try {
         const payload = config.update.parse(request.body);
         const result = await repository.update(entity, id, payload, request.ctx);
-        await persistIdempotentResponse(request, result, idempotencyStore);
-        reply.send(result);
+        const normalized = normalizeGatewayRecord(entity, result);
+        await persistIdempotentResponse(request, normalized, idempotencyStore);
+        reply.send(normalized);
       } catch (err) {
         handleError(err, reply, config.collection);
       }
