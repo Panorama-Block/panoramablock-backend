@@ -64,7 +64,7 @@ export const buildApp = ({
   app.addHook('preHandler', tenantMiddleware);
   app.addHook('preHandler', idempotencyMiddleware);
 
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
     if (error instanceof ValidationError) {
       reply.status(400).send({ error: 'validation_error', message: error.message });
       return;
@@ -77,6 +77,14 @@ export const buildApp = ({
       reply.status(404).send({ error: 'not_found', message: error.message });
       return;
     }
+    request.log.error(
+      {
+        err: error,
+        entity: (request.params as Record<string, unknown> | undefined)?.entity,
+        requestId: request.id,
+      },
+      'Unhandled database gateway error'
+    );
     reply.status(500).send({ error: 'internal_server_error' });
   });
 

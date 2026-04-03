@@ -3,7 +3,6 @@ name: panorama
 services:
   auth_service:
     image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/auth-service:${IMAGE_TAG}
-    container_name: panorama-auth-service
     env_file:
       - .env.production
     environment:
@@ -15,7 +14,13 @@ services:
     ports:
       - "127.0.0.1:3001:3001"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health || exit 1"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -26,7 +31,6 @@ services:
 
   bridge_service:
     image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/bridge-service:${IMAGE_TAG}
-    container_name: panorama-bridge-service
     env_file:
       - .env.production
     environment:
@@ -39,7 +43,13 @@ services:
     volumes:
       - ./shared/token-registry.json:/app/shared/token-registry.json:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3005/health || exit 1"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3005/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -47,7 +57,6 @@ services:
 
   liquid_swap_service:
     image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/liquid-swap:${IMAGE_TAG}
-    container_name: panorama-liquid-swap
     env_file:
       - .env.production
     environment:
@@ -62,7 +71,13 @@ services:
     volumes:
       - ./shared/token-registry.json:/app/shared/token-registry.json:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3002/health || exit 1"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3002/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -77,7 +92,6 @@ services:
 
   lido_service:
     image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/lido-service:${IMAGE_TAG}
-    container_name: panorama-lido-service
     env_file:
       - .env.production
     environment:
@@ -89,7 +103,13 @@ services:
     ports:
       - "127.0.0.1:3004:3004"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3004/health || exit 1"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3004/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -102,7 +122,6 @@ services:
 
   lending_service:
     image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/lending-service:${IMAGE_TAG}
-    container_name: panorama-lending-service
     env_file:
       - .env.production
     environment:
@@ -114,7 +133,13 @@ services:
     ports:
       - "127.0.0.1:3007:3007"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3007/health || exit 1"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3007/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -129,7 +154,6 @@ services:
 
   dca_service:
     image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/dca-service:${IMAGE_TAG}
-    container_name: panorama-dca-service
     env_file:
       - .env.production
     environment:
@@ -148,7 +172,13 @@ services:
     ports:
       - "127.0.0.1:3008:3007"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3007/health || exit 1"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3007/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -163,7 +193,6 @@ services:
 
   diagram_service:
     image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/diagram-service:${IMAGE_TAG}
-    container_name: panorama-diagram-service
     env_file:
       - .env.production
     environment:
@@ -173,7 +202,13 @@ services:
     ports:
       - "127.0.0.1:3010:3010"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3010/health || exit 1"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3010/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -181,7 +216,6 @@ services:
 
   database_gateway:
     image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/database-gateway:${IMAGE_TAG}
-    container_name: panorama-database-gateway
     env_file:
       - .env.production
     environment:
@@ -194,7 +228,13 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -202,7 +242,6 @@ services:
 
   execution_service:
     image: ${EXECUTION_SERVICE_IMAGE}
-    container_name: panorama-execution-service
     env_file:
       - .env.production
     environment:
@@ -212,7 +251,13 @@ services:
     ports:
       - "127.0.0.1:3011:3010"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3010/health || exit 1"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3010/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -220,7 +265,6 @@ services:
 
   engine:
     image: thirdweb/engine:latest
-    container_name: panorama-thirdweb-engine
     env_file:
       - .env.production
     environment:
@@ -231,7 +275,13 @@ services:
     ports:
       - "127.0.0.1:3005:3005"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3005/health || exit 1"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3005/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -242,7 +292,6 @@ services:
 
   worker_example:
     image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/dca-service:${IMAGE_TAG}
-    container_name: panorama-worker-example
     command: ["npm", "run", "worker"]
     env_file:
       - .env.production
@@ -255,7 +304,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: panorama-redis
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASS}"]
     ports:
       - "127.0.0.1:6379:6379"
