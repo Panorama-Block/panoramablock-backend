@@ -139,6 +139,7 @@ jobs:
           EXECUTION_SERVICE_IMAGE=${{ needs.prepare.outputs.execution_service_image }}
           NODE_ENV=production
           LOG_LEVEL=info
+          ALLOWED_ORIGINS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name allowed-origins --query value -o tsv)
           POSTGRES_HOST=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-host --query value -o tsv)
           POSTGRES_APP_USER=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-app-user --query value -o tsv)
           POSTGRES_APP_PASSWORD=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-app-password --query value -o tsv)
@@ -176,6 +177,7 @@ jobs:
           AVAX_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name avax-rpc-url --query value -o tsv)
           EXECUTOR_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name executor-address --query value -o tsv)
           AVAX_EXECUTOR_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name avax-executor-address --query value -o tsv)
+          AERODROME_ADAPTER_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name aerodrome-adapter-address --query value -o tsv)
           DCA_VAULT_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name dca-vault-address --query value -o tsv)
           VALIDATION_CONTRACT_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name validation-contract-address --query value -o tsv)
           LAYERSWAP_API_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name layerswap-api-key --query value -o tsv)
