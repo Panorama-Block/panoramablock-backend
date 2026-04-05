@@ -30,6 +30,15 @@ cleanup() {
   fi
 }
 
+cleanup_legacy_execution_service() {
+  local legacy_name="panorama-execution-service"
+
+  if docker ps -a --format '{{.Names}}' | grep -Fxq "${legacy_name}"; then
+    echo "removing legacy container: ${legacy_name}"
+    docker rm -f "${legacy_name}"
+  fi
+}
+
 render_caddyfile() {
   local template_path="$1"
   local output_path="$2"
@@ -99,6 +108,17 @@ TARGET_SERVICES=("$@")
 
 if [[ ${#TARGET_SERVICES[@]} -eq 0 && -n "${SERVICES:-}" ]]; then
   read -r -a TARGET_SERVICES <<< "${SERVICES}"
+fi
+
+if [[ ${#TARGET_SERVICES[@]} -eq 0 ]]; then
+  cleanup_legacy_execution_service
+else
+  for service in "${TARGET_SERVICES[@]}"; do
+    if [[ "${service}" == "execution_service" ]]; then
+      cleanup_legacy_execution_service
+      break
+    fi
+  done
 fi
 
 if [[ ${#TARGET_SERVICES[@]} -gt 0 ]]; then
