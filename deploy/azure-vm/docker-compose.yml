@@ -247,7 +247,6 @@ services:
     environment:
       PORT: 3010
       NODE_ENV: ${NODE_ENV:-production}
-      ALLOWED_ORIGINS: https://${APP_DOMAIN}
     ports:
       - "127.0.0.1:3011:3010"
     healthcheck:
