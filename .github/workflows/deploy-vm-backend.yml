@@ -170,7 +170,7 @@ jobs:
           ETHEREUM_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name ethereum-rpc-url --query value -o tsv)
           POLYGON_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name polygon-rpc-url --query value -o tsv)
           BSC_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name bsc-rpc-url --query value -o tsv)
-          BASE_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name base-rpc-url --query value -o tsv)
+          BASE_RPC_URLS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name base-rpc-url --query value -o tsv)
           OPTIMISM_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name optimism-rpc-url --query value -o tsv)
           ARBITRUM_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name arbitrum-rpc-url --query value -o tsv)
           AVALANCHE_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name avalanche-rpc-url --query value -o tsv)
