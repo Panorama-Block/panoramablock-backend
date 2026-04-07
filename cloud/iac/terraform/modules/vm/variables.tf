@@ -10,6 +10,21 @@ variable "name_prefix" {
   type = string
 }
 
+variable "network_interface_name_override" {
+  type    = string
+  default = null
+}
+
+variable "vm_name_override" {
+  type    = string
+  default = null
+}
+
+variable "os_disk_name_override" {
+  type    = string
+  default = null
+}
+
 variable "subnet_id" {
   type = string
 }
