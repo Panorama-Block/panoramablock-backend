@@ -1,5 +1,11 @@
+locals {
+  network_interface_name = coalesce(var.network_interface_name_override, "${var.name_prefix}-nic")
+  vm_name                = coalesce(var.vm_name_override, "${var.name_prefix}-vm")
+  os_disk_name           = coalesce(var.os_disk_name_override, "${var.name_prefix}-osdisk")
+}
+
 resource "azurerm_network_interface" "this" {
-  name                = "${var.name_prefix}-nic"
+  name                = local.network_interface_name
   location            = var.location
   resource_group_name = var.resource_group_name
   tags                = var.tags
@@ -13,7 +19,7 @@ resource "azurerm_network_interface" "this" {
 }
 
 resource "azurerm_linux_virtual_machine" "this" {
-  name                = "${var.name_prefix}-vm"
+  name                = local.vm_name
   resource_group_name = var.resource_group_name
   location            = var.location
   size                = var.vm_size
@@ -39,7 +45,7 @@ resource "azurerm_linux_virtual_machine" "this" {
   }
 
   os_disk {
-    name                 = "${var.name_prefix}-osdisk"
+    name                 = local.os_disk_name
     caching              = "ReadWrite"
     storage_account_type = "StandardSSD_LRS"
     disk_size_gb         = var.os_disk_size_gb
