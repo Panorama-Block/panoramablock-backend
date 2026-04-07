@@ -29,3 +29,11 @@ output "postgres_fqdn" {
 output "postgres_private_dns_zone" {
   value = module.postgres.private_dns_zone_name
 }
+
+output "telegram_gateway_public_ip_address" {
+  value = try(azurerm_public_ip.telegram_gateway[0].ip_address, null)
+}
+
+output "telegram_gateway_private_ip_address" {
+  value = try(module.telegram_gateway_vm[0].private_ip_address, null)
+}

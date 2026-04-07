@@ -158,3 +158,21 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "telegram_gateway_vm_enabled" {
+  description = "Create a second VM for Telegram gateway traffic."
+  type        = bool
+  default     = false
+}
+
+variable "telegram_gateway_vm_size" {
+  description = "VM size for the Telegram gateway VM."
+  type        = string
+  default     = "Standard_B1ms"
+}
+
+variable "telegram_gateway_app_directory" {
+  description = "Directory where the Telegram gateway deployment bundle will live on the VM."
+  type        = string
+  default     = "/opt/telegram-gateway"
+}

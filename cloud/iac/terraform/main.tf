@@ -45,6 +45,22 @@ resource "azurerm_resource_group" "main" {
   tags     = local.common_tags
 }
 
+resource "azurerm_public_ip" "telegram_gateway" {
+  count               = var.telegram_gateway_vm_enabled ? 1 : 0
+  name                = "${local.name_prefix}-telegram-gateway-pip"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  allocation_method   = "Static"
+  sku                 = var.public_ip_sku
+  tags = merge(
+    local.common_tags,
+    {
+      architecture = "two-vm-transition"
+      workload     = "telegram-gateway"
+    }
+  )
+}
+
 module "network" {
   source = "./modules/network"
 
@@ -73,6 +89,33 @@ module "vm" {
   app_user            = var.app_user
   app_directory       = var.app_directory
   tags                = local.common_tags
+}
+
+module "telegram_gateway_vm" {
+  count  = var.telegram_gateway_vm_enabled ? 1 : 0
+  source = "./modules/vm"
+
+  resource_group_name          = azurerm_resource_group.main.name
+  location                     = azurerm_resource_group.main.location
+  name_prefix                  = local.name_prefix
+  network_interface_name_override = "${local.name_prefix}-telegram-gateway-nic"
+  vm_name_override             = "${local.name_prefix}-telegram-gateway-vm"
+  os_disk_name_override        = "${local.name_prefix}-telegram-gateway-osdisk"
+  subnet_id                    = module.network.app_subnet_id
+  public_ip_id                 = azurerm_public_ip.telegram_gateway[0].id
+  vm_size                      = var.telegram_gateway_vm_size
+  admin_username               = var.vm_admin_username
+  ssh_public_key               = var.vm_admin_ssh_public_key
+  os_disk_size_gb              = var.vm_os_disk_size_gb
+  app_user                     = var.app_user
+  app_directory                = var.telegram_gateway_app_directory
+  tags = merge(
+    local.common_tags,
+    {
+      architecture = "two-vm-transition"
+      workload     = "telegram-gateway"
+    }
+  )
 }
 
 module "keyvault" {
