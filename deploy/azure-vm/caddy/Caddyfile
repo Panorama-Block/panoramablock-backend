@@ -2,6 +2,67 @@
 	email {$LETSENCRYPT_EMAIL}
 }
 
+:8081 {
+	@auth path /auth* /api/auth*
+	handle @auth {
+		reverse_proxy 127.0.0.1:3001
+	}
+
+	@bridge path /bridge* /api/bridge*
+	handle @bridge {
+		reverse_proxy 127.0.0.1:3003
+	}
+
+	@swap path /swap* /api/swap*
+	handle @swap {
+		reverse_proxy 127.0.0.1:3002
+	}
+
+	@lido path /lido* /api/lido*
+	handle @lido {
+		reverse_proxy 127.0.0.1:3004
+	}
+
+	@lending path /lending* /api/lending*
+	handle @lending {
+		reverse_proxy 127.0.0.1:3007
+	}
+
+	@dca path /dca* /api/dca*
+	handle @dca {
+		reverse_proxy 127.0.0.1:3008
+	}
+
+	@diagram path /diagram* /api/diagram*
+	handle @diagram {
+		reverse_proxy 127.0.0.1:3010
+	}
+
+	handle_path /database* {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	handle_path /api/database* {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	handle_path /execution* {
+		reverse_proxy 127.0.0.1:3011
+	}
+
+	handle_path /api/execution* {
+		reverse_proxy 127.0.0.1:3011
+	}
+
+	handle_path /engine* {
+		reverse_proxy 127.0.0.1:3005
+	}
+
+	handle {
+		respond "Panorama heavy VM backhaul is running." 200
+	}
+}
+
 {$APP_DOMAIN} {
 	encode gzip zstd
 

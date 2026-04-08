@@ -29,9 +29,9 @@ locals {
   name_prefix = "${var.project_name}-${var.environment}"
   common_tags = merge(
     {
-      project     = var.project_name
-      environment = var.environment
-      managed_by  = "terraform"
+      project      = var.project_name
+      environment  = var.environment
+      managed_by   = "terraform"
       architecture = "single-vm-compose"
     },
     var.tags
@@ -64,14 +64,14 @@ resource "azurerm_public_ip" "telegram_gateway" {
 module "network" {
   source = "./modules/network"
 
-  resource_group_name         = azurerm_resource_group.main.name
-  location                    = azurerm_resource_group.main.location
-  name_prefix                 = local.name_prefix
-  vnet_cidr                   = var.vnet_cidr
-  app_subnet_cidr             = var.app_subnet_cidr
-  postgres_subnet_cidr        = var.postgres_subnet_cidr
-  public_ip_sku               = var.public_ip_sku
-  tags                        = local.common_tags
+  resource_group_name  = azurerm_resource_group.main.name
+  location             = azurerm_resource_group.main.location
+  name_prefix          = local.name_prefix
+  vnet_cidr            = var.vnet_cidr
+  app_subnet_cidr      = var.app_subnet_cidr
+  postgres_subnet_cidr = var.postgres_subnet_cidr
+  public_ip_sku        = var.public_ip_sku
+  tags                 = local.common_tags
 }
 
 module "vm" {
@@ -95,20 +95,20 @@ module "telegram_gateway_vm" {
   count  = var.telegram_gateway_vm_enabled ? 1 : 0
   source = "./modules/vm"
 
-  resource_group_name          = azurerm_resource_group.main.name
-  location                     = azurerm_resource_group.main.location
-  name_prefix                  = local.name_prefix
+  resource_group_name             = azurerm_resource_group.main.name
+  location                        = azurerm_resource_group.main.location
+  name_prefix                     = local.name_prefix
   network_interface_name_override = "${local.name_prefix}-telegram-gateway-nic"
-  vm_name_override             = "${local.name_prefix}-telegram-gateway-vm"
-  os_disk_name_override        = "${local.name_prefix}-telegram-gateway-osdisk"
-  subnet_id                    = module.network.app_subnet_id
-  public_ip_id                 = azurerm_public_ip.telegram_gateway[0].id
-  vm_size                      = var.telegram_gateway_vm_size
-  admin_username               = var.vm_admin_username
-  ssh_public_key               = var.vm_admin_ssh_public_key
-  os_disk_size_gb              = var.vm_os_disk_size_gb
-  app_user                     = var.app_user
-  app_directory                = var.telegram_gateway_app_directory
+  vm_name_override                = "${local.name_prefix}-telegram-gateway-vm"
+  os_disk_name_override           = "${local.name_prefix}-telegram-gateway-osdisk"
+  subnet_id                       = module.network.app_subnet_id
+  public_ip_id                    = azurerm_public_ip.telegram_gateway[0].id
+  vm_size                         = var.telegram_gateway_vm_size
+  admin_username                  = var.vm_admin_username
+  ssh_public_key                  = var.vm_admin_ssh_public_key
+  os_disk_size_gb                 = var.vm_os_disk_size_gb
+  app_user                        = var.app_user
+  app_directory                   = var.telegram_gateway_app_directory
   tags = merge(
     local.common_tags,
     {
@@ -132,20 +132,20 @@ module "keyvault" {
 module "postgres" {
   source = "./modules/postgres"
 
-  resource_group_name     = azurerm_resource_group.main.name
-  location                = azurerm_resource_group.main.location
-  name_prefix             = local.name_prefix
-  administrator_login     = var.postgres_admin_username
-  administrator_password  = var.postgres_admin_password
-  sku_name                = var.postgres_sku_name
-  postgres_version        = var.postgres_version
-  storage_mb              = var.postgres_storage_mb
-  backup_retention_days   = var.postgres_backup_retention_days
-  delegated_subnet_id     = module.network.postgres_subnet_id
-  virtual_network_id      = module.network.vnet_id
-  database_names          = var.postgres_databases
-  zone                    = var.postgres_zone
-  tags                    = local.common_tags
+  resource_group_name    = azurerm_resource_group.main.name
+  location               = azurerm_resource_group.main.location
+  name_prefix            = local.name_prefix
+  administrator_login    = var.postgres_admin_username
+  administrator_password = var.postgres_admin_password
+  sku_name               = var.postgres_sku_name
+  postgres_version       = var.postgres_version
+  storage_mb             = var.postgres_storage_mb
+  backup_retention_days  = var.postgres_backup_retention_days
+  delegated_subnet_id    = module.network.postgres_subnet_id
+  virtual_network_id     = module.network.vnet_id
+  database_names         = var.postgres_databases
+  zone                   = var.postgres_zone
+  tags                   = local.common_tags
 }
 
 resource "azurerm_key_vault_access_policy" "terraform_operator" {
