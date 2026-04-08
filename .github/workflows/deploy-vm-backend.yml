@@ -237,8 +237,14 @@ jobs:
           script: |
             set -euxo pipefail
             whoami
+            printf 'user(hex)=%s\n' "$(whoami | xxd -p)"
+            python3 - <<'PY'
+            import subprocess
+            user = subprocess.check_output(['whoami'], text=True).strip()
+            print('user_chars=', [ord(ch) for ch in user])
+            PY
             id
-            sudo -n true
+            sudo -n -l
             cd ${{ env.DEPLOY_PATH }}
             pwd
             ls -la
