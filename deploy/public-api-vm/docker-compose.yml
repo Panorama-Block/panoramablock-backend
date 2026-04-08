@@ -1,0 +1,197 @@
+name: panorama-public-api
+
+services:
+  gateway:
+    image: ${TELEGRAM_GATEWAY_IMAGE}
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-7778}
+      NEXTJS_PROXY_ENABLED: ${NEXTJS_PROXY_ENABLED:-false}
+      AUTH_API_BASE: ${AUTH_API_BASE}
+      AGENTS_API_BASE: ${AGENTS_API_BASE}
+    ports:
+      - "127.0.0.1:${PORT:-7778}:${PORT:-7778}"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:' + (process.env.PORT || '7778') + '/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "${REDIS_PASS}"]
+    environment:
+      REDIS_PASS: ${REDIS_PASS}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASS}", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  auth_service:
+    image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/auth-service:${IMAGE_TAG}
+    env_file:
+      - .env.production
+    environment:
+      PORT: 3001
+      NODE_ENV: ${NODE_ENV:-production}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      AUTH_DOMAIN: ${APP_DOMAIN}
+    ports:
+      - "127.0.0.1:3001:3001"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  bridge_service:
+    image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/bridge-service:${IMAGE_TAG}
+    env_file:
+      - .env.production
+    environment:
+      PORT: 3005
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@${POSTGRES_HOST}:5432/tac_service?sslmode=require
+      AUTH_SERVICE_URL: http://auth_service:3001
+      LIQUID_SWAP_SERVICE_URL: http://liquid_swap_service:3002
+      LIDO_SERVICE_URL: http://lido_service:3004
+      LENDING_SERVICE_URL: http://lending_service:3007
+      DB_GATEWAY_URL: ${DB_GATEWAY_URL}
+      THIRDWEB_ENGINE_URL: ${THIRDWEB_ENGINE_URL}
+      TOKEN_REGISTRY_PATH: /app/shared/token-registry.json
+    ports:
+      - "127.0.0.1:3003:3005"
+    volumes:
+      - ./shared/token-registry.json:/app/shared/token-registry.json:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3005/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      auth_service:
+        condition: service_started
+      liquid_swap_service:
+        condition: service_started
+      lido_service:
+        condition: service_started
+      lending_service:
+        condition: service_started
+
+  liquid_swap_service:
+    image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/liquid-swap:${IMAGE_TAG}
+    env_file:
+      - .env.production
+    environment:
+      PORT: 3002
+      NODE_ENV: ${NODE_ENV:-production}
+      AUTH_SERVICE_URL: http://auth_service:3001
+      ENGINE_URL: ${ENGINE_URL}
+      EXECUTION_LAYER_URL: ${EXECUTION_LAYER_URL}
+      TOKEN_REGISTRY_PATH: /app/shared/token-registry.json
+    ports:
+      - "127.0.0.1:3002:3002"
+    volumes:
+      - ./shared/token-registry.json:/app/shared/token-registry.json:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3002/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      auth_service:
+        condition: service_started
+
+  lido_service:
+    image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/lido-service:${IMAGE_TAG}
+    env_file:
+      - .env.production
+    environment:
+      PORT: 3004
+      NODE_ENV: ${NODE_ENV:-production}
+      AUTH_SERVICE_URL: http://auth_service:3001
+      DATABASE_URL: postgresql://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@${POSTGRES_HOST}:5432/panorama_lido?sslmode=require
+      ENGINE_URL: ${ENGINE_URL}
+      DB_GATEWAY_URL: ${DB_GATEWAY_URL}
+    ports:
+      - "127.0.0.1:3004:3004"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3004/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      auth_service:
+        condition: service_started
+
+  lending_service:
+    image: ${GHCR_REGISTRY:-ghcr.io}/${GHCR_NAMESPACE}/lending-service:${IMAGE_TAG}
+    env_file:
+      - .env.production
+    environment:
+      PORT: 3007
+      NODE_ENV: ${NODE_ENV:-production}
+      AUTH_SERVICE_URL: http://auth_service:3001
+      EXECUTION_LAYER_URL: ${EXECUTION_LAYER_URL}
+      ENGINE_URL: ${ENGINE_URL}
+      DB_GATEWAY_URL: ${DB_GATEWAY_URL}
+    ports:
+      - "127.0.0.1:3007:3007"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3007/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      auth_service:
+        condition: service_started

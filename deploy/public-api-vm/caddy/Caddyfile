@@ -1,0 +1,69 @@
+{
+	email {$LETSENCRYPT_EMAIL}
+}
+
+{$APP_DOMAIN} {
+	encode gzip zstd
+
+	@auth path /auth* /api/auth*
+	handle @auth {
+		reverse_proxy 127.0.0.1:3001
+	}
+
+	@bridge path /bridge* /api/bridge*
+	handle @bridge {
+		reverse_proxy 127.0.0.1:3003
+	}
+
+	@swap path /swap* /api/swap*
+	handle @swap {
+		reverse_proxy 127.0.0.1:3002
+	}
+
+	@lido path /lido* /api/lido*
+	handle @lido {
+		reverse_proxy 127.0.0.1:3004
+	}
+
+	@lending path /lending* /api/lending*
+	handle @lending {
+		reverse_proxy 127.0.0.1:3007
+	}
+
+	@dca path /dca* /api/dca*
+	handle @dca {
+		reverse_proxy http://{$HEAVY_VM_BACKHAUL_HOST}
+	}
+
+	@diagram path /diagram* /api/diagram*
+	handle @diagram {
+		reverse_proxy http://{$HEAVY_VM_BACKHAUL_HOST}
+	}
+
+	@database path /database*
+	handle @database {
+		reverse_proxy http://{$HEAVY_VM_BACKHAUL_HOST}
+	}
+
+	@database_api path /api/database*
+	handle @database_api {
+		reverse_proxy http://{$HEAVY_VM_BACKHAUL_HOST}
+	}
+
+	@execution path /execution* /api/execution*
+	handle @execution {
+		reverse_proxy http://{$HEAVY_VM_BACKHAUL_HOST}
+	}
+
+	handle {
+		respond "Panorama public/api VM is running." 200
+	}
+}
+
+{$GATEWAY_DOMAIN} {
+	encode gzip zstd
+
+	handle {
+		reverse_proxy 127.0.0.1:7778
+	}
+}

@@ -1,10 +1,10 @@
-name: Deploy Heavy Backend To Azure VM
+name: Deploy Public API VM
 
 on:
   workflow_dispatch:
     inputs:
-      execution_service_image:
-        description: Full execution-service image reference published by panoramablock-execution-layer
+      gateway_image:
+        description: Telegram gateway image reference. Defaults to ghcr.io/<owner>/telegram-gateway:latest
         required: false
         type: string
 
@@ -15,37 +15,42 @@ permissions:
 
 env:
   GHCR_REGISTRY: ghcr.io
+  RG: rg-panorama-dev
+  PROJECT_NAME: panorama
+  ENVIRONMENT_NAME: dev
   IMAGE_TAG: ${{ github.sha }}
-  DEPLOY_PATH: /opt/panorama/current
+  DEPLOY_PATH: /opt/public-api/current
   KEY_VAULT_NAME: ${{ secrets.AZURE_KEY_VAULT_NAME }}
 
 jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
-      execution_service_image: ${{ steps.execution_image.outputs.image }}
+      gateway_image: ${{ steps.gateway_image.outputs.image }}
     steps:
-      - name: Resolve execution-service image
-        id: execution_image
+      - name: Resolve telegram gateway image
+        id: gateway_image
         env:
-          INPUT_EXECUTION_SERVICE_IMAGE: ${{ inputs.execution_service_image }}
-          VAR_EXECUTION_SERVICE_IMAGE: ${{ vars.EXECUTION_SERVICE_IMAGE }}
-          SECRET_EXECUTION_SERVICE_IMAGE: ${{ secrets.EXECUTION_SERVICE_IMAGE }}
+          INPUT_GATEWAY_IMAGE: ${{ inputs.gateway_image }}
+          VAR_GATEWAY_IMAGE: ${{ vars.TELEGRAM_GATEWAY_IMAGE }}
+          SECRET_GATEWAY_IMAGE: ${{ secrets.TELEGRAM_GATEWAY_IMAGE }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
 
-          EXECUTION_IMAGE="${INPUT_EXECUTION_SERVICE_IMAGE:-}"
-          if [[ -z "${EXECUTION_IMAGE}" ]]; then
-            EXECUTION_IMAGE="${VAR_EXECUTION_SERVICE_IMAGE:-}"
+          OWNER_LOWER=$(echo "${REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          GATEWAY_IMAGE="${INPUT_GATEWAY_IMAGE:-}"
+          if [[ -z "${GATEWAY_IMAGE}" ]]; then
+            GATEWAY_IMAGE="${VAR_GATEWAY_IMAGE:-}"
           fi
-          if [[ -z "${EXECUTION_IMAGE}" ]]; then
-            EXECUTION_IMAGE="${SECRET_EXECUTION_SERVICE_IMAGE:-}"
+          if [[ -z "${GATEWAY_IMAGE}" ]]; then
+            GATEWAY_IMAGE="${SECRET_GATEWAY_IMAGE:-}"
           fi
-          if [[ -z "${EXECUTION_IMAGE}" ]]; then
-            EXECUTION_IMAGE="ghcr.io/panorama-block/execution-service:latest"
+          if [[ -z "${GATEWAY_IMAGE}" ]]; then
+            GATEWAY_IMAGE="ghcr.io/${OWNER_LOWER}/telegram-gateway:latest"
           fi
 
-          echo "image=${EXECUTION_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "image=${GATEWAY_IMAGE}" >> "$GITHUB_OUTPUT"
 
   build:
     runs-on: ubuntu-latest
@@ -54,15 +59,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: dca-service
-            context: ./dca-service
-            dockerfile: ./dca-service/Dockerfile
-          - name: diagram-service
-            context: ./diagram-service
-            dockerfile: ./diagram-service/Dockerfile
-          - name: database-gateway
-            context: ./database
-            dockerfile: ./database/Dockerfile
+          - name: auth-service
+            context: ./auth-service
+            dockerfile: ./auth-service/Dockerfile
+          - name: bridge-service
+            context: ./bridge-service
+            dockerfile: ./bridge-service/Dockerfile
+          - name: liquid-swap
+            context: .
+            dockerfile: ./liquid-swap-service/Dockerfile
+          - name: lido-service
+            context: ./lido-service
+            dockerfile: ./lido-service/Dockerfile
+          - name: lending-service
+            context: ./lending-service
+            dockerfile: ./lending-service/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -77,7 +88,6 @@ jobs:
         run: |
           OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
           echo "image=${GHCR_REGISTRY}/${OWNER_LOWER}/${{ matrix.name }}:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "namespace=${OWNER_LOWER}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         run: |
@@ -105,25 +115,65 @@ jobs:
           OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
           echo "namespace=${OWNER_LOWER}" >> "$GITHUB_OUTPUT"
 
-      - name: Render runtime env from Key Vault
+      - name: Resolve VM hosts
+        id: vm_hosts
         run: |
+          set -euo pipefail
+
+          PUBLIC_API_PIP_NAME="${PROJECT_NAME}-${ENVIRONMENT_NAME}-telegram-gateway-pip"
+          PUBLIC_API_VM_HOST=$(az network public-ip show \
+            --resource-group "$RG" \
+            --name "$PUBLIC_API_PIP_NAME" \
+            --query ipAddress \
+            -o tsv)
+
+          HEAVY_VM_NAME="${PROJECT_NAME}-${ENVIRONMENT_NAME}-vm"
+          HEAVY_VM_PRIVATE_IP=$(az vm list-ip-addresses \
+            --resource-group "$RG" \
+            --name "$HEAVY_VM_NAME" \
+            --query "[0].virtualMachine.network.privateIpAddresses[0]" \
+            -o tsv)
+
+          echo "public_api_host=${PUBLIC_API_VM_HOST}" >> "$GITHUB_OUTPUT"
+          echo "heavy_vm_private_ip=${HEAVY_VM_PRIVATE_IP}" >> "$GITHUB_OUTPUT"
+
+      - name: Render runtime env from Key Vault
+        env:
+          HEAVY_VM_PRIVATE_IP: ${{ steps.vm_hosts.outputs.heavy_vm_private_ip }}
+          TELEGRAM_GATEWAY_IMAGE: ${{ needs.prepare.outputs.gateway_image }}
+        run: |
+          set -euo pipefail
+
           rm -rf .deploy-tmp
           mkdir -p .deploy-tmp
-          POSTGRES_ADMIN_USER=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-admin-user --query value -o tsv)
-          POSTGRES_ADMIN_PASSWORD=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-admin-password --query value -o tsv)
-          echo "POSTGRES_ADMIN_USER=${POSTGRES_ADMIN_USER}" >> "$GITHUB_ENV"
-          echo "POSTGRES_ADMIN_PASSWORD=${POSTGRES_ADMIN_PASSWORD}" >> "$GITHUB_ENV"
-          cat > .deploy-tmp/.env.production <<EOF
+
           APP_DOMAIN=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name app-domain --query value -o tsv)
           LETSENCRYPT_EMAIL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name letsencrypt-email --query value -o tsv)
+          PUBLIC_GATEWAY_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name public-gateway-url --query value -o tsv)
+          PUBLIC_WEBAPP_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name public-webapp-url --query value -o tsv)
+          WEBSITE_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name website-url --query value -o tsv)
+          GATEWAY_DOMAIN=$(python3 -c "from urllib.parse import urlparse; import sys; print(urlparse(sys.argv[1]).netloc)" "$PUBLIC_GATEWAY_URL")
+          AUTH_API_BASE="https://${APP_DOMAIN}"
+          AGENTS_API_BASE=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name agents-api-base --query value -o tsv)
+          TELEGRAM_BOT_TOKEN=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name telegram-bot-token --query value -o tsv)
+          TELEGRAM_WEBHOOK_SECRET=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name telegram-webhook-secret --query value -o tsv)
+          DEFAULT_WALLET_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name default-wallet-address --query value -o tsv 2>/dev/null || true)
+          HEAVY_VM_BACKHAUL_HOST="${HEAVY_VM_PRIVATE_IP}:8081"
+
+          cat > .deploy-tmp/.env.production <<EOF
+          APP_DOMAIN=${APP_DOMAIN}
+          GATEWAY_DOMAIN=${GATEWAY_DOMAIN}
+          LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
           GHCR_REGISTRY=${GHCR_REGISTRY}
           GHCR_NAMESPACE=${{ steps.meta.outputs.namespace }}
           GHCR_USERNAME=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name ghcr-username --query value -o tsv)
           GHCR_PASSWORD=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name ghcr-password --query value -o tsv)
           IMAGE_TAG=${IMAGE_TAG}
-          EXECUTION_SERVICE_IMAGE=${{ needs.prepare.outputs.execution_service_image }}
+          TELEGRAM_GATEWAY_IMAGE=${TELEGRAM_GATEWAY_IMAGE}
           NODE_ENV=production
           LOG_LEVEL=info
+          HEAVY_VM_BACKHAUL_HOST=${HEAVY_VM_BACKHAUL_HOST}
+          HEAVY_VM_PRIVATE_IP=${HEAVY_VM_PRIVATE_IP}
           ALLOWED_ORIGINS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name allowed-origins --query value -o tsv)
           POSTGRES_HOST=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-host --query value -o tsv)
           POSTGRES_APP_USER=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-app-user --query value -o tsv)
@@ -132,7 +182,7 @@ jobs:
           REDIS_HOST=redis
           REDIS_PORT=6379
           REDIS_URL=redis://:$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name redis-pass --query value -o tsv)@redis:6379
-          DB_GATEWAY_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name db-gateway-url --query value -o tsv)
+          DB_GATEWAY_URL=http://${HEAVY_VM_BACKHAUL_HOST}/database
           DB_GATEWAY_SERVICE_TOKEN=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name db-gateway-service-token --query value -o tsv)
           DB_GATEWAY_TENANT_ID=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name db-gateway-tenant-id --query value -o tsv)
           DB_GATEWAY_SYNC_ENABLED=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name db-gateway-sync-enabled --query value -o tsv)
@@ -141,10 +191,15 @@ jobs:
           THIRDWEB_SECRET_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name thirdweb-secret-key --query value -o tsv)
           THIRDWEB_API_SECRET_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name thirdweb-api-secret-key --query value -o tsv)
           ENGINE_ACCESS_TOKEN=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name engine-access-token --query value -o tsv)
+          ENGINE_URL=http://${HEAVY_VM_BACKHAUL_HOST}/engine
+          THIRDWEB_ENGINE_URL=http://${HEAVY_VM_BACKHAUL_HOST}/engine
+          EXECUTION_LAYER_URL=http://${HEAVY_VM_BACKHAUL_HOST}/execution
+          EXECUTION_SERVICE_URL=http://${HEAVY_VM_BACKHAUL_HOST}/execution
           ADMIN_WALLET_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name admin-wallet-address --query value -o tsv)
           ENCRYPTION_PASSWORD=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name encryption-password --query value -o tsv)
           AUTH_PRIVATE_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name auth-private-key --query value -o tsv)
-          AUTH_DOMAIN=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name app-domain --query value -o tsv)
+          AUTH_DOMAIN=https://${APP_DOMAIN}
+          AUTH_API_BASE=${AUTH_API_BASE}
           TON_JWT_SECRET=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name ton-jwt-secret --query value -o tsv)
           JWT_SECRET=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name jwt-secret --query value -o tsv)
           PRIVATE_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name private-key --query value -o tsv)
@@ -155,86 +210,70 @@ jobs:
           ETHEREUM_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name ethereum-rpc-url --query value -o tsv)
           POLYGON_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name polygon-rpc-url --query value -o tsv)
           BSC_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name bsc-rpc-url --query value -o tsv)
-          BASE_RPC_URLS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name base-rpc-url --query value -o tsv)
+          BASE_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name base-rpc-url --query value -o tsv)
           OPTIMISM_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name optimism-rpc-url --query value -o tsv)
           ARBITRUM_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name arbitrum-rpc-url --query value -o tsv)
           AVALANCHE_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name avalanche-rpc-url --query value -o tsv)
           AVAX_RPC_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name avax-rpc-url --query value -o tsv)
           EXECUTOR_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name executor-address --query value -o tsv)
           AVAX_EXECUTOR_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name avax-executor-address --query value -o tsv)
-          PANORAMA_SWAP_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name panorama-swap-address --query value -o tsv)
-          PANORAMA_LEND_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name panorama-lending-address --query value -o tsv)
-          PANORAMA_LIQUID_STAKING_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name panorama-liquid-staking-address --query value -o tsv)
-          AERODROME_ADAPTER_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name aerodrome-adapter-address --query value -o tsv)
           DCA_VAULT_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name dca-vault-address --query value -o tsv)
           VALIDATION_CONTRACT_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name validation-contract-address --query value -o tsv)
           LAYERSWAP_API_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name layerswap-api-key --query value -o tsv)
           LAYERSWAP_TON_VAULT=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name layerswap-ton-vault --query value -o tsv)
+          PUBLIC_GATEWAY_URL=${PUBLIC_GATEWAY_URL}
+          PUBLIC_WEBAPP_URL=${PUBLIC_WEBAPP_URL}
+          WEBSITE_URL=${WEBSITE_URL}
+          AGENTS_API_BASE=${AGENTS_API_BASE}
+          TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+          TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
+          DEFAULT_WALLET_ADDRESS=${DEFAULT_WALLET_ADDRESS}
+          AGENTS_REQUEST_TIMEOUT_MS=45000
+          AGENTS_DEBUG_SHAPE=false
+          DEFAULT_CHAIN_ID=8453
+          NEXTJS_PROXY_ENABLED=false
+          PORT=7778
           EOF
 
       - name: Prepare deploy bundle
         run: |
           mkdir -p .deploy-tmp/shared .deploy-tmp/scripts
-          cp deploy/azure-vm/docker-compose.heavy.yml .deploy-tmp/docker-compose.yml
-          cp deploy/azure-vm/caddy/Caddyfile .deploy-tmp/Caddyfile
+          cp deploy/public-api-vm/docker-compose.yml .deploy-tmp/docker-compose.yml
+          cp deploy/public-api-vm/caddy/Caddyfile .deploy-tmp/Caddyfile
           cp deploy/azure-vm/scripts/deploy.sh .deploy-tmp/scripts/deploy.sh
-          cp deploy/azure-vm/scripts/init-managed-postgres.sh .deploy-tmp/scripts/init-managed-postgres.sh
           cp shared/token-registry.json .deploy-tmp/shared/token-registry.json
-          chmod +x .deploy-tmp/scripts/*.sh
+          chmod +x .deploy-tmp/scripts/deploy.sh
+
+      - name: Prepare VM permissions
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ steps.vm_hosts.outputs.public_api_host }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            APP_DIR=/opt/public-api
+            CURRENT_DIR="${APP_DIR}/current"
+            DEPLOY_USER='${{ secrets.VM_USER }}'
+            sudo install -d -m 2775 -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" "${APP_DIR}" "${CURRENT_DIR}" "${CURRENT_DIR}/scripts" "${CURRENT_DIR}/shared"
 
       - name: Copy bundle to VM
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.VM_HOST }}
+          host: ${{ steps.vm_hosts.outputs.public_api_host }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           source: ".deploy-tmp/.env.production,.deploy-tmp/docker-compose.yml,.deploy-tmp/Caddyfile,.deploy-tmp/shared,.deploy-tmp/scripts"
           target: "${{ env.DEPLOY_PATH }}"
           strip_components: 1
 
-      - name: Run database bootstrap
+      - name: Deploy public/api VM bundle
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          envs: POSTGRES_ADMIN_USER,POSTGRES_ADMIN_PASSWORD
-          script: |
-            cd ${{ env.DEPLOY_PATH }}
-            set -a
-            source .env.production
-            set +a
-            ./scripts/init-managed-postgres.sh \
-              "$POSTGRES_HOST" \
-              "$POSTGRES_ADMIN_USER" \
-              "$POSTGRES_ADMIN_PASSWORD" \
-              panorama_core panorama_dca tac_service panorama_lido panorama_data_gateway
-
-      - name: Run database gateway migrations
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          envs: POSTGRES_ADMIN_USER,POSTGRES_ADMIN_PASSWORD
-          script: |
-            cd ${{ env.DEPLOY_PATH }}
-            set -a
-            source .env.production
-            set +a
-            docker pull "${GHCR_REGISTRY}/${{ steps.meta.outputs.namespace }}/database-gateway:${IMAGE_TAG}"
-            docker run --rm \
-              -e DATABASE_URL="postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@${POSTGRES_HOST}:5432/panorama_data_gateway?sslmode=require" \
-              "${GHCR_REGISTRY}/${{ steps.meta.outputs.namespace }}/database-gateway:${IMAGE_TAG}" \
-              npm run migrate:deploy
-
-      - name: Pull latest images and restart stack
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VM_HOST }}
+          host: ${{ steps.vm_hosts.outputs.public_api_host }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             cd ${{ env.DEPLOY_PATH }}
             chmod +x ./scripts/deploy.sh
-            SERVICES="redis engine execution_service database_gateway dca_service diagram_service" APP_DIR=/opt/panorama ./scripts/deploy.sh
+            APP_DIR=/opt/public-api ./scripts/deploy.sh

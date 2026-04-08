@@ -55,6 +55,34 @@ resource "azurerm_network_security_rule" "https" {
   network_security_group_name = azurerm_network_security_group.app.name
 }
 
+resource "azurerm_network_security_rule" "telegram_gateway_health" {
+  name                        = "allow-telegram-gateway-health"
+  priority                    = 115
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "7778"
+  source_address_prefix       = "*"
+  destination_address_prefix  = "*"
+  resource_group_name         = var.resource_group_name
+  network_security_group_name = azurerm_network_security_group.app.name
+}
+
+resource "azurerm_network_security_rule" "app_backhaul" {
+  name                        = "allow-app-backhaul"
+  priority                    = 120
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "8081"
+  source_address_prefix       = var.app_subnet_cidr
+  destination_address_prefix  = "*"
+  resource_group_name         = var.resource_group_name
+  network_security_group_name = azurerm_network_security_group.app.name
+}
+
 resource "azurerm_subnet" "app" {
   name                 = "${var.name_prefix}-app-subnet"
   resource_group_name  = var.resource_group_name

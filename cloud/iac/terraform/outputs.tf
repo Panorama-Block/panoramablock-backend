@@ -37,3 +37,11 @@ output "telegram_gateway_public_ip_address" {
 output "telegram_gateway_private_ip_address" {
   value = try(module.telegram_gateway_vm[0].private_ip_address, null)
 }
+
+output "public_api_vm_public_ip_address" {
+  value = try(azurerm_public_ip.telegram_gateway[0].ip_address, null)
+}
+
+output "public_api_vm_private_ip_address" {
+  value = try(module.telegram_gateway_vm[0].private_ip_address, null)
+}
