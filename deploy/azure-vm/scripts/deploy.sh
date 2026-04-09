@@ -74,22 +74,42 @@ cleanup_legacy_execution_service() {
 render_caddyfile() {
   local template_path="$1"
   local output_path="$2"
+  local env_file_path="$3"
 
   if command -v python3 >/dev/null 2>&1; then
-    python3 - "$template_path" "$output_path" <<'PY'
+    python3 - "$template_path" "$output_path" "$env_file_path" <<'PY'
 import os
 import re
 import sys
 
-template_path, output_path = sys.argv[1], sys.argv[2]
+template_path, output_path, env_file_path = sys.argv[1], sys.argv[2], sys.argv[3]
 pattern = re.compile(r"\{\$([A-Z0-9_]+)\}")
+
+env_values = dict(os.environ)
+
+with open(env_file_path, "r", encoding="utf-8") as f:
+    for raw_line in f:
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key.startswith("export "):
+            key = key[len("export "):].strip()
+
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+
+        env_values[key] = value
 
 with open(template_path, "r", encoding="utf-8") as f:
     content = f.read()
 
 def replace(match):
     name = match.group(1)
-    value = os.environ.get(name)
+    value = env_values.get(name)
     if value is None:
         raise SystemExit(f"missing template variable: {name}")
     return value
@@ -129,7 +149,7 @@ fi
 
 if [[ -f "${CADDY_SOURCE}" ]]; then
   CADDY_RENDERED="$(mktemp "${RELEASE_DIR}/Caddyfile.rendered.XXXXXX")"
-  render_caddyfile "${CADDY_SOURCE}" "${CADDY_RENDERED}"
+  render_caddyfile "${CADDY_SOURCE}" "${CADDY_RENDERED}" "${ENV_FILE}"
   sudo -n install -m 0644 "${CADDY_RENDERED}" /etc/caddy/Caddyfile
   sudo -n caddy validate --config /etc/caddy/Caddyfile
   sudo -n systemctl enable caddy
