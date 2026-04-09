@@ -5,6 +5,16 @@
 {$APP_DOMAIN} {
 	encode gzip zstd
 
+	@telegram_auth path /auth/telegram/verify
+	handle @telegram_auth {
+		reverse_proxy 127.0.0.1:7778
+	}
+
+	@telegram_gateway path /telegram* /miniapp* /healthz /__miniapp_debug
+	handle @telegram_gateway {
+		reverse_proxy 127.0.0.1:7778
+	}
+
 	@auth path /auth* /api/auth*
 	handle @auth {
 		reverse_proxy 127.0.0.1:3001
@@ -57,13 +67,5 @@
 
 	handle {
 		respond "Panorama public/api VM is running." 200
-	}
-}
-
-{$GATEWAY_DOMAIN} {
-	encode gzip zstd
-
-	handle {
-		reverse_proxy 127.0.0.1:7778
 	}
 }
