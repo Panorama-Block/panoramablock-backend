@@ -235,19 +235,6 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            set -euxo pipefail
-            whoami
-            printf 'user(hex)=%s\n' "$(whoami | xxd -p)"
-            python3 - <<'PY'
-            import subprocess
-            user = subprocess.check_output(['whoami'], text=True).strip()
-            print('user_chars=', [ord(ch) for ch in user])
-            PY
-            id
-            sudo -n -l
             cd ${{ env.DEPLOY_PATH }}
-            pwd
-            ls -la
-            test -f ./scripts/deploy.sh
             chmod +x ./scripts/deploy.sh
             SERVICES="redis engine execution_service database_gateway dca_service diagram_service" APP_DIR=/opt/panorama ./scripts/deploy.sh

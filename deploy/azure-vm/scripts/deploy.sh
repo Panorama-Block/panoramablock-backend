@@ -24,6 +24,38 @@ require_env() {
   fi
 }
 
+read_env_file_value() {
+  local file_path="$1"
+  local var_name="$2"
+
+  python3 - "$file_path" "$var_name" <<'PY'
+import sys
+
+file_path, var_name = sys.argv[1], sys.argv[2]
+
+with open(file_path, "r", encoding="utf-8") as f:
+    for raw_line in f:
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key.startswith("export "):
+            key = key[len("export "):].strip()
+
+        if key != var_name:
+            continue
+
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+
+        print(value, end="")
+        break
+PY
+}
+
 cleanup() {
   if [[ -n "${CADDY_RENDERED}" && -f "${CADDY_RENDERED}" ]]; then
     rm -f "${CADDY_RENDERED}"
@@ -80,9 +112,13 @@ require_file "${COMPOSE_FILE}"
 require_file "${ENV_FILE}"
 require_file "${CADDY_SOURCE}"
 
-set -a
-source "${ENV_FILE}"
-set +a
+APP_DOMAIN="$(read_env_file_value "${ENV_FILE}" "APP_DOMAIN")"
+LETSENCRYPT_EMAIL="$(read_env_file_value "${ENV_FILE}" "LETSENCRYPT_EMAIL")"
+GHCR_USERNAME="${GHCR_USERNAME:-$(read_env_file_value "${ENV_FILE}" "GHCR_USERNAME")}"
+GHCR_PASSWORD="${GHCR_PASSWORD:-$(read_env_file_value "${ENV_FILE}" "GHCR_PASSWORD")}"
+GHCR_REGISTRY="${GHCR_REGISTRY:-$(read_env_file_value "${ENV_FILE}" "GHCR_REGISTRY")}"
+
+export APP_DOMAIN LETSENCRYPT_EMAIL GHCR_USERNAME GHCR_PASSWORD GHCR_REGISTRY
 
 require_env "APP_DOMAIN"
 require_env "LETSENCRYPT_EMAIL"
@@ -94,13 +130,13 @@ fi
 if [[ -f "${CADDY_SOURCE}" ]]; then
   CADDY_RENDERED="$(mktemp "${RELEASE_DIR}/Caddyfile.rendered.XXXXXX")"
   render_caddyfile "${CADDY_SOURCE}" "${CADDY_RENDERED}"
-  sudo install -m 0644 "${CADDY_RENDERED}" /etc/caddy/Caddyfile
-  sudo caddy validate --config /etc/caddy/Caddyfile
-  sudo systemctl enable caddy
-  if sudo systemctl is-active --quiet caddy; then
-    sudo systemctl reload caddy
+  sudo -n install -m 0644 "${CADDY_RENDERED}" /etc/caddy/Caddyfile
+  sudo -n caddy validate --config /etc/caddy/Caddyfile
+  sudo -n systemctl enable caddy
+  if sudo -n systemctl is-active --quiet caddy; then
+    sudo -n systemctl reload caddy
   else
-    sudo systemctl start caddy
+    sudo -n systemctl start caddy
   fi
 fi
 
