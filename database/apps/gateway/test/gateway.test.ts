@@ -3,6 +3,7 @@ import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import { buildApp } from '../src/http/app.js';
 import { AppConfig } from '../src/config.js';
 import { signTestToken } from './setup.js';
+import { decodeCompositeId, encodeCompositeId } from '../../../packages/core/compositeId.js';
 import {
   RepositoryPort,
   RequestCtx,
@@ -147,7 +148,9 @@ class InMemoryRepository implements RepositoryPort {
       const key = config.primaryKeys[0];
       return item[key] === id;
     }
-    const parts = typeof id === 'string' ? id.split(':') : config.primaryKeys.map((key) => id[key]);
+    const parts = typeof id === 'string'
+      ? decodeCompositeId(id, config.primaryKeys.length)
+      : config.primaryKeys.map((key) => id[key]);
     return config.primaryKeys.every((key, index) => item[key] === parts[index]);
   }
 }
@@ -167,6 +170,12 @@ const seedData = {
       userId: 'user-1',
       conversationId: 'conv-1',
       tenantId: 'tenant-test'
+    },
+    {
+      id: 'legacy-conv-ton-row-id',
+      userId: '0:abcd',
+      conversationId: 'conv-ton-1',
+      tenantId: 'tenant-test'
     }
   ],
   messages: [
@@ -176,6 +185,15 @@ const seedData = {
       conversationId: 'conv-1',
       role: 'user',
       content: 'Hello',
+      tenantId: 'tenant-test'
+    }
+  ],
+  'agent-shared-states': [
+    {
+      agentName: 'swap_agent',
+      userId: '0:abcd',
+      conversationId: 'conv-ton-1',
+      state: {},
       tenantId: 'tenant-test'
     }
   ]
@@ -276,5 +294,56 @@ describe('Gateway HTTP API', () => {
 
     expect(listResponse.status).toBe(200);
     expect(listResponse.body.data[0].id).toBe('user-1:conv-1');
+  });
+
+  it('supports encoded composite ids when a userId contains a colon', async () => {
+    const encodedId = encodeCompositeId(['0:abcd', 'conv-ton-1']);
+    const getResponse = await request(app.server)
+      .get(`/v1/conversations/${encodedId}`)
+      .set('authorization', authHeader())
+      .set('x-tenant-id', 'tenant-test');
+
+    expect(getResponse.status).toBe(200);
+    expect(getResponse.body.id).toBe(encodedId);
+    expect(getResponse.body.userId).toBe('0:abcd');
+    expect(getResponse.body.conversationId).toBe('conv-ton-1');
+
+    const patchResponse = await request(app.server)
+      .patch(`/v1/conversations/${encodedId}`)
+      .set('authorization', authHeader())
+      .set('x-tenant-id', 'tenant-test')
+      .set('idempotency-key', 'test-key-ton-1')
+      .send({ title: 'TON title' });
+
+    expect(patchResponse.status).toBe(200);
+    expect(patchResponse.body.id).toBe(encodedId);
+    expect(patchResponse.body.title).toBe('TON title');
+
+    const deleteResponse = await request(app.server)
+      .delete(`/v1/conversations/${encodedId}`)
+      .set('authorization', authHeader())
+      .set('x-tenant-id', 'tenant-test')
+      .set('idempotency-key', 'test-key-ton-2');
+
+    expect(deleteResponse.status).toBe(204);
+  });
+
+  it('normalizes list responses using encoded ids for composite-key entities', async () => {
+    const conversationList = await request(app.server)
+      .get('/v1/conversations')
+      .set('authorization', authHeader())
+      .set('x-tenant-id', 'tenant-test');
+
+    expect(conversationList.status).toBe(200);
+    expect(conversationList.body.data.some((item: any) => item.id === encodeCompositeId(['0:abcd', 'conv-ton-1']))).toBe(true);
+
+    const sharedStateResponse = await request(app.server)
+      .get(`/v1/agent-shared-states/${encodeCompositeId(['swap_agent', '0:abcd', 'conv-ton-1'])}`)
+      .set('authorization', authHeader())
+      .set('x-tenant-id', 'tenant-test');
+
+    expect(sharedStateResponse.status).toBe(200);
+    expect(sharedStateResponse.body.id).toBe(encodeCompositeId(['swap_agent', '0:abcd', 'conv-ton-1']));
+    expect(sharedStateResponse.body.userId).toBe('0:abcd');
   });
 });
