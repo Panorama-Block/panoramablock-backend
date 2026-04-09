@@ -21,6 +21,25 @@ const resolveConfig = (entity: string) => {
   return config;
 };
 
+const resolveRequestId = (
+  request: FastifyRequest<{ Params: EntityParams }>,
+  entity: string,
+  fallbackId: string,
+  isComposite: boolean
+): string => {
+  if (!isComposite) {
+    return fallbackId;
+  }
+
+  const rawUrl = request.raw.url ?? request.url;
+  const pathname = rawUrl.split('?')[0] ?? '';
+  const prefix = `/v1/${entity}/`;
+  if (!pathname.startsWith(prefix)) {
+    return fallbackId;
+  }
+  return pathname.slice(prefix.length);
+};
+
 export const createCrudHandlers = (
   repository: RepositoryPort,
   idempotencyStore: IdempotencyStore
@@ -50,7 +69,8 @@ export const createCrudHandlers = (
         return;
       }
 
-      const result = await repository.get(entity, id, request.ctx);
+      const resolvedId = resolveRequestId(request, entity, id, config.primaryKeys.length > 1);
+      const result = await repository.get(entity, resolvedId, request.ctx);
       if (!result) {
         reply.status(404).send({ error: 'not_found', message: `${config.collection} not found` });
         return;
@@ -83,7 +103,8 @@ export const createCrudHandlers = (
       }
       try {
         const payload = config.update.parse(request.body);
-        const result = await repository.update(entity, id, payload, request.ctx);
+        const resolvedId = resolveRequestId(request, entity, id, config.primaryKeys.length > 1);
+        const result = await repository.update(entity, resolvedId, payload, request.ctx);
         const normalized = normalizeGatewayRecord(entity, result);
         await persistIdempotentResponse(request, normalized, idempotencyStore);
         reply.send(normalized);
@@ -101,7 +122,8 @@ export const createCrudHandlers = (
         return;
       }
       try {
-        await repository.delete(entity, id, request.ctx);
+        const resolvedId = resolveRequestId(request, entity, id, config.primaryKeys.length > 1);
+        await repository.delete(entity, resolvedId, request.ctx);
         await persistIdempotentResponse(request, { status: 'deleted' }, idempotencyStore);
         reply.status(204).send();
       } catch (err) {

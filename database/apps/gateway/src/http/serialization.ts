@@ -1,17 +1,20 @@
-const canonicalConversationId = (record: Record<string, any>): string | null => {
-  const userId = typeof record.userId === 'string' ? record.userId : null;
-  const conversationId = typeof record.conversationId === 'string' ? record.conversationId : null;
-  if (!userId || !conversationId) {
-    return null;
-  }
-  return `${userId}:${conversationId}`;
-};
+import { entityConfigByCollection } from '../../../../packages/core/entities.js';
+import { encodeCompositeIdFromRecord } from '../../../../packages/core/compositeId.js';
 
-const normalizeConversationRecord = (record: Record<string, any>): Record<string, any> => {
-  const canonicalId = canonicalConversationId(record);
+const normalizeCompositeRecord = (
+  entity: string,
+  record: Record<string, any>
+): Record<string, any> => {
+  const config = entityConfigByCollection[entity];
+  if (!config || config.primaryKeys.length <= 1) {
+    return record;
+  }
+
+  const canonicalId = encodeCompositeIdFromRecord(config.primaryKeys, record);
   if (!canonicalId) {
     return record;
   }
+
   return {
     ...record,
     id: canonicalId
@@ -23,11 +26,7 @@ export const normalizeGatewayRecord = (entity: string, record: any): any => {
     return record;
   }
 
-  if (entity === 'conversations') {
-    return normalizeConversationRecord(record);
-  }
-
-  return record;
+  return normalizeCompositeRecord(entity, record);
 };
 
 export const normalizeGatewayListResponse = (entity: string, response: any): any => {
@@ -44,4 +43,3 @@ export const normalizeGatewayListResponse = (entity: string, response: any): any
     data: response.data.map((item: any) => normalizeGatewayRecord(entity, item))
   };
 };
-

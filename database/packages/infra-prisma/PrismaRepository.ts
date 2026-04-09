@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { entityConfigByCollection, EntityConfig } from '../core/entities.js';
+import { decodeCompositeId } from '../core/compositeId.js';
 import {
   ensureAuthorized,
   ForbiddenError,
@@ -51,8 +52,10 @@ const buildUniqueWhere = (config: EntityConfig, id: unknown): Record<string, unk
 
   let components: Record<string, string | number | boolean>;
   if (typeof id === 'string') {
-    const parts = id.split(':');
-    if (parts.length !== config.primaryKeys.length) {
+    let parts: string[];
+    try {
+      parts = decodeCompositeId(id, config.primaryKeys.length);
+    } catch {
       throw new ValidationError('Invalid composite identifier');
     }
     components = Object.fromEntries(
