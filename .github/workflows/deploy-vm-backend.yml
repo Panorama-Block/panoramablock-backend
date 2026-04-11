@@ -57,9 +57,6 @@ jobs:
           - name: dca-service
             context: ./dca-service
             dockerfile: ./dca-service/Dockerfile
-          - name: diagram-service
-            context: ./diagram-service
-            dockerfile: ./diagram-service/Dockerfile
           - name: database-gateway
             context: ./database
             dockerfile: ./database/Dockerfile
@@ -237,4 +234,4 @@ jobs:
           script: |
             cd ${{ env.DEPLOY_PATH }}
             chmod +x ./scripts/deploy.sh
-            SERVICES="redis engine execution_service database_gateway dca_service diagram_service" APP_DIR=/opt/panorama ./scripts/deploy.sh
+            SERVICES="redis engine execution_service database_gateway dca_service" APP_DIR=/opt/panorama ./scripts/deploy.sh
