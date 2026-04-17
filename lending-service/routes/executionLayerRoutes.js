@@ -289,6 +289,182 @@ router.post('/benqi-validation/getValidationAndBorrowQuote', async (req, res) =>
   }
 });
 
+// ─── Moonwell (Base) ──────────────────────────────────────────────────────────
+
+/**
+ * GET /moonwell/markets
+ * Proxies to execution layer /base/lending/markets
+ */
+router.get('/moonwell/markets', async (req, res) => {
+  try {
+    const data = await getFromExecutionLayer('/base/lending/markets');
+    if (data.error) return res.status(500).json({ error: data.error });
+    res.json(data);
+  } catch (err) {
+    console.error('[executionLayerProxy] moonwell markets error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch Moonwell markets from execution layer' });
+  }
+});
+
+/**
+ * GET /moonwell/account/:address
+ * Proxies to execution layer /base/lending/position/:address
+ */
+router.get('/moonwell/account/:address', async (req, res) => {
+  try {
+    const data = await getFromExecutionLayer(`/base/lending/position/${req.params.address}`);
+    if (data.error) return res.status(500).json({ error: data.error });
+    res.json(data);
+  } catch (err) {
+    console.error('[executionLayerProxy] moonwell position error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch Moonwell position from execution layer' });
+  }
+});
+
+/**
+ * GET /moonwell/account/:address/positions
+ * Returns Moonwell positions in the format expected by the miniapp LendingApiClient.
+ */
+router.get('/moonwell/account/:address/positions', async (req, res) => {
+  try {
+    const address = req.params.address;
+    const data = await getFromExecutionLayer(`/base/lending/position/${address}`);
+    if (data.error) return res.status(500).json({ error: data.error });
+
+    const positions = (data.positions || []).map((p) => ({
+      chainId: 8453,
+      protocol: 'moonwell',
+      mTokenAddress: p.mTokenAddress,
+      mTokenSymbol: p.mTokenSymbol,
+      underlyingAddress: p.underlyingAddress,
+      underlyingSymbol: p.underlyingSymbol,
+      underlyingDecimals: p.underlyingDecimals ?? 18,
+      mTokenDecimals: 8,
+      mTokenBalanceWei: p.mTokenBalance,
+      suppliedWei: p.suppliedWei ?? '0',
+      borrowedWei: p.borrowedWei ?? '0',
+      collateralEnabled: true,
+    }));
+
+    res.json({
+      data: {
+        accountAddress: address,
+        liquidity: { accountAddress: address, liquidity: '0', shortfall: '0', isHealthy: true },
+        positions,
+        updatedAt: Date.now(),
+      },
+    });
+  } catch (err) {
+    console.error('[executionLayerProxy] moonwell positions error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch Moonwell positions from execution layer' });
+  }
+});
+
+/**
+ * POST /moonwell/validateAndSupply
+ * Body: { address, amount, mTokenAddress, useNativeETH? }
+ */
+router.post('/moonwell/validateAndSupply', async (req, res) => {
+  try {
+    const { address, amount, mTokenAddress, useNativeETH } = req.body;
+    const data = await proxyToExecutionLayer('/base/lending/prepare-supply', {
+      userAddress: address,
+      mTokenAddress,
+      amount,
+      useNativeETH,
+    });
+    if (data.error) return res.status(400).json({ status: 400, data: { error: data.error } });
+    res.json({ status: 200, data: mapBundleToLendingResponse(data.bundle, 'supply') });
+  } catch (err) {
+    console.error('[executionLayerProxy] moonwell supply error:', err.message);
+    res.status(500).json({ status: 500, data: { error: 'Moonwell supply preparation failed' } });
+  }
+});
+
+/**
+ * POST /moonwell/validateAndWithdraw
+ * Body: { address, amount, mTokenAddress, useNativeETH? }
+ */
+router.post('/moonwell/validateAndWithdraw', async (req, res) => {
+  try {
+    const { address, amount, mTokenAddress, useNativeETH } = req.body;
+    const data = await proxyToExecutionLayer('/base/lending/prepare-redeem', {
+      userAddress: address,
+      mTokenAddress,
+      amount,
+      useNativeETH,
+    });
+    if (data.error) return res.status(400).json({ status: 400, data: { error: data.error } });
+    res.json({ status: 200, data: mapBundleToLendingResponse(data.bundle, 'redeem') });
+  } catch (err) {
+    console.error('[executionLayerProxy] moonwell withdraw error:', err.message);
+    res.status(500).json({ status: 500, data: { error: 'Moonwell redeem preparation failed' } });
+  }
+});
+
+/**
+ * POST /moonwell/validateAndBorrow
+ * Body: { address, amount, mTokenAddress, useNativeETH? }
+ */
+router.post('/moonwell/validateAndBorrow', async (req, res) => {
+  try {
+    const { address, amount, mTokenAddress, useNativeETH } = req.body;
+    const data = await proxyToExecutionLayer('/base/lending/prepare-borrow', {
+      userAddress: address,
+      mTokenAddress,
+      amount,
+      useNativeETH,
+    });
+    if (data.error) return res.status(400).json({ status: 400, data: { error: data.error } });
+    res.json({ status: 200, data: mapBundleToLendingResponse(data.bundle, 'borrow') });
+  } catch (err) {
+    console.error('[executionLayerProxy] moonwell borrow error:', err.message);
+    res.status(500).json({ status: 500, data: { error: 'Moonwell borrow preparation failed' } });
+  }
+});
+
+/**
+ * POST /moonwell/validateAndRepay
+ * Body: { address, amount, mTokenAddress, useNativeETH? }
+ */
+router.post('/moonwell/validateAndRepay', async (req, res) => {
+  try {
+    const { address, amount, mTokenAddress, useNativeETH } = req.body;
+    const data = await proxyToExecutionLayer('/base/lending/prepare-repay', {
+      userAddress: address,
+      mTokenAddress,
+      amount,
+      useNativeETH,
+    });
+    if (data.error) return res.status(400).json({ status: 400, data: { error: data.error } });
+    res.json({ status: 200, data: mapBundleToLendingResponse(data.bundle, 'repay') });
+  } catch (err) {
+    console.error('[executionLayerProxy] moonwell repay error:', err.message);
+    res.status(500).json({ status: 500, data: { error: 'Moonwell repay preparation failed' } });
+  }
+});
+
+/**
+ * POST /moonwell/recoverEth
+ * Builds a sweepETH transaction to recover native ETH stranded in the user's
+ * MoonwellLendAdapter proxy (caused by the now-fixed ERC20 redeem bug on mWETH).
+ * Body: { address }
+ */
+router.post('/moonwell/recoverEth', async (req, res) => {
+  try {
+    const { address } = req.body;
+    const data = await proxyToExecutionLayer('/base/lending/prepare-sweep-eth', {
+      userAddress: address,
+    });
+    if (data.error) return res.status(400).json({ status: 400, data: { error: data.error } });
+    // Return the raw bundle so the frontend can execute it directly
+    res.json({ status: 200, data: { bundle: data.bundle, metadata: data.metadata } });
+  } catch (err) {
+    console.error('[executionLayerProxy] moonwell recoverEth error:', err.message);
+    res.status(500).json({ status: 500, data: { error: 'ETH recovery preparation failed' } });
+  }
+});
+
 // ─── Liquid Staking (AVAX → sAVAX via PanoramaLiquidStaking) ─────────────────
 
 // sAVAX on Avalanche C-Chain
