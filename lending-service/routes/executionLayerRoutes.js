@@ -445,6 +445,94 @@ router.post('/moonwell/validateAndRepay', async (req, res) => {
 });
 
 /**
+ * POST /moonwell/prepareSupplyWithPermit
+ * Returns { permitMessage, executeCalldata, permitTarget, executorAddress, chainId, metadata }.
+ * If permitMessage is null, the token does not support EIP-2612 — fall back to validateAndSupply.
+ * Body: { address, amount, mTokenAddress }
+ */
+router.post('/moonwell/prepareSupplyWithPermit', async (req, res) => {
+  try {
+    const { address, amount, mTokenAddress } = req.body;
+    const data = await proxyToExecutionLayer('/base/lending/prepare-supply-with-permit', {
+      userAddress: address,
+      mTokenAddress,
+      amount,
+    });
+    if (data.error) return res.status(400).json({ status: 400, data: { error: data.error } });
+    res.json({ status: 200, data });
+  } catch (err) {
+    console.error('[executionLayerProxy] moonwell prepareSupplyWithPermit error:', err.message);
+    res.status(500).json({ status: 500, data: { error: 'Moonwell permit preparation failed' } });
+  }
+});
+
+/**
+ * POST /moonwell/finalizeSupplyPermit
+ * Takes the permit signature and returns a single Multicall3 bundle (permit + execute).
+ * Body: { address, permitMessage, signature, executeCalldata, executorAddress }
+ */
+router.post('/moonwell/finalizeSupplyPermit', async (req, res) => {
+  try {
+    const { address, permitMessage, signature, executeCalldata, executorAddress } = req.body;
+    const data = await proxyToExecutionLayer('/base/lending/finalize-supply-permit', {
+      userAddress: address,
+      permitMessage,
+      signature,
+      executeCalldata,
+      executorAddress,
+    });
+    if (data.error) return res.status(400).json({ status: 400, data: { error: data.error } });
+    // Return the bundle directly so the frontend can execute it
+    res.json({ status: 200, data: { bundle: data.bundle, metadata: data.metadata } });
+  } catch (err) {
+    console.error('[executionLayerProxy] moonwell finalizeSupplyPermit error:', err.message);
+    res.status(500).json({ status: 500, data: { error: 'Moonwell permit finalization failed' } });
+  }
+});
+
+/**
+ * POST /moonwell/prepareRepayWithPermit
+ * Body: { address, amount, mTokenAddress }
+ */
+router.post('/moonwell/prepareRepayWithPermit', async (req, res) => {
+  try {
+    const { address, amount, mTokenAddress } = req.body;
+    const data = await proxyToExecutionLayer('/base/lending/prepare-repay-with-permit', {
+      userAddress: address,
+      mTokenAddress,
+      amount,
+    });
+    if (data.error) return res.status(400).json({ status: 400, data: { error: data.error } });
+    res.json({ status: 200, data });
+  } catch (err) {
+    console.error('[executionLayerProxy] moonwell prepareRepayWithPermit error:', err.message);
+    res.status(500).json({ status: 500, data: { error: 'Moonwell repay permit preparation failed' } });
+  }
+});
+
+/**
+ * POST /moonwell/finalizeRepayPermit
+ * Body: { address, permitMessage, signature, executeCalldata, executorAddress }
+ */
+router.post('/moonwell/finalizeRepayPermit', async (req, res) => {
+  try {
+    const { address, permitMessage, signature, executeCalldata, executorAddress } = req.body;
+    const data = await proxyToExecutionLayer('/base/lending/finalize-repay-permit', {
+      userAddress: address,
+      permitMessage,
+      signature,
+      executeCalldata,
+      executorAddress,
+    });
+    if (data.error) return res.status(400).json({ status: 400, data: { error: data.error } });
+    res.json({ status: 200, data: { bundle: data.bundle, metadata: data.metadata } });
+  } catch (err) {
+    console.error('[executionLayerProxy] moonwell finalizeRepayPermit error:', err.message);
+    res.status(500).json({ status: 500, data: { error: 'Moonwell repay permit finalization failed' } });
+  }
+});
+
+/**
  * POST /moonwell/recoverEth
  * Builds a sweepETH transaction to recover native ETH stranded in the user's
  * MoonwellLendAdapter proxy (caused by the now-fixed ERC20 redeem bug on mWETH).
