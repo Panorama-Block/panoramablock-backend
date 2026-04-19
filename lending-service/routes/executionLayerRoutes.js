@@ -468,21 +468,22 @@ router.post('/moonwell/prepareSupplyWithPermit', async (req, res) => {
 
 /**
  * POST /moonwell/finalizeSupplyPermit
- * Takes the permit signature and returns a single Multicall3 bundle (permit + execute).
- * Body: { address, permitMessage, signature, executeCalldata, executorAddress }
+ * Takes the permit signature and returns a single Multicall3 bundle (permit + transferFrom + execute).
+ * Body: { address, permitMessage, signature, executeCalldata, executorAddress, adapterProxy, amount }
  */
 router.post('/moonwell/finalizeSupplyPermit', async (req, res) => {
   try {
-    const { address, permitMessage, signature, executeCalldata, executorAddress } = req.body;
+    const { address, permitMessage, signature, executeCalldata, executorAddress, adapterProxy, amount } = req.body;
     const data = await proxyToExecutionLayer('/base/lending/finalize-supply-permit', {
       userAddress: address,
       permitMessage,
       signature,
       executeCalldata,
       executorAddress,
+      adapterProxy,
+      amount,
     });
     if (data.error) return res.status(400).json({ status: 400, data: { error: data.error } });
-    // Return the bundle directly so the frontend can execute it
     res.json({ status: 200, data: { bundle: data.bundle, metadata: data.metadata } });
   } catch (err) {
     console.error('[executionLayerProxy] moonwell finalizeSupplyPermit error:', err.message);
@@ -512,17 +513,19 @@ router.post('/moonwell/prepareRepayWithPermit', async (req, res) => {
 
 /**
  * POST /moonwell/finalizeRepayPermit
- * Body: { address, permitMessage, signature, executeCalldata, executorAddress }
+ * Body: { address, permitMessage, signature, executeCalldata, executorAddress, adapterProxy, amount }
  */
 router.post('/moonwell/finalizeRepayPermit', async (req, res) => {
   try {
-    const { address, permitMessage, signature, executeCalldata, executorAddress } = req.body;
+    const { address, permitMessage, signature, executeCalldata, executorAddress, adapterProxy, amount } = req.body;
     const data = await proxyToExecutionLayer('/base/lending/finalize-repay-permit', {
       userAddress: address,
       permitMessage,
       signature,
       executeCalldata,
       executorAddress,
+      adapterProxy,
+      amount,
     });
     if (data.error) return res.status(400).json({ status: 400, data: { error: data.error } });
     res.json({ status: 200, data: { bundle: data.bundle, metadata: data.metadata } });
