@@ -1,3 +1,5 @@
+export type StrategyActionType = 'swap' | 'lending' | 'liquid_staking' | 'liquidity_pool';
+
 export interface SmartAccountPermissions {
   approvedTargets: string[];
   nativeTokenLimitPerTransaction: string;
@@ -16,8 +18,9 @@ export interface SmartAccountData {
 }
 
 export interface DCAStrategy {
-  strategyId?: string; // Unique identifier
+  strategyId?: string;
   smartAccountId: string;
+  actionType: StrategyActionType;
   fromToken: string;
   toToken: string;
   fromChainId: number;
@@ -27,6 +30,12 @@ export interface DCAStrategy {
   lastExecuted: number;
   nextExecution: number;
   isActive: boolean;
+  // Lending-specific
+  protocol?: string;
+  lendingAction?: 'supply' | 'borrow';
+  // LP-specific
+  amountB?: string;
+  tokenB?: string;
 }
 
 export interface ExecutionHistory {
@@ -51,10 +60,17 @@ export interface CreateSmartAccountRequest {
 
 export interface CreateStrategyRequest {
   smartAccountId: string;
+  actionType?: StrategyActionType; // defaults to 'swap' for backwards compat
   fromToken: string;
   toToken: string;
   fromChainId: number;
   toChainId: number;
   amount: string;
   interval: 'daily' | 'weekly' | 'monthly';
+  // Lending-specific
+  protocol?: string;
+  action?: 'supply' | 'borrow';
+  // LP-specific
+  amountB?: string;
+  tokenB?: string;
 }

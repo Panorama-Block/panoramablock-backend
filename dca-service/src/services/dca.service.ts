@@ -1,5 +1,5 @@
 import { DatabaseService } from './database.service';
-import { DCAStrategy, CreateStrategyRequest, ExecutionHistory } from '../types';
+import { DCAStrategy, CreateStrategyRequest, ExecutionHistory, StrategyActionType } from '../types';
 
 export class DCAService {
   private db: DatabaseService;
@@ -15,7 +15,8 @@ export class DCAService {
     strategyId: string;
     nextExecution: Date;
   }> {
-    console.log('[DCAService] Creating strategy for account:', request.smartAccountId);
+    const actionType: StrategyActionType = request.actionType || 'swap';
+    console.log(`[DCAService] Creating ${actionType} strategy for account:`, request.smartAccountId);
 
     // 1. Verify smart account exists
     const accountCheck = await this.db.query(
@@ -38,13 +39,15 @@ export class DCAService {
     // 4. Create strategy in database
     await this.db.query(
       `INSERT INTO dca_strategies (
-        id, smart_account_address, from_token, to_token,
+        id, smart_account_address, action_type, from_token, to_token,
         from_chain_id, to_chain_id, amount, "interval",
-        last_executed, next_execution, is_active
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        last_executed, next_execution, is_active,
+        protocol, lending_action, amount_b, token_b
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
       [
         strategyId,
         request.smartAccountId,
+        actionType,
         request.fromToken,
         request.toToken,
         request.fromChainId,
@@ -53,11 +56,15 @@ export class DCAService {
         request.interval,
         0,
         nextExecution,
-        true
+        true,
+        request.protocol || null,
+        request.action || null,
+        request.amountB || null,
+        request.tokenB || null,
       ]
     );
 
-    console.log('[DCAService] ✅ Strategy created:', strategyId);
+    console.log(`[DCAService] ✅ ${actionType} strategy created:`, strategyId);
 
     return {
       strategyId,
@@ -73,6 +80,7 @@ export class DCAService {
       `SELECT
         id as "strategyId",
         smart_account_address as "smartAccountId",
+        action_type as "actionType",
         from_token as "fromToken",
         to_token as "toToken",
         from_chain_id as "fromChainId",
@@ -81,7 +89,11 @@ export class DCAService {
         "interval",
         last_executed as "lastExecuted",
         next_execution as "nextExecution",
-        is_active as "isActive"
+        is_active as "isActive",
+        protocol,
+        lending_action as "lendingAction",
+        amount_b as "amountB",
+        token_b as "tokenB"
        FROM dca_strategies
        WHERE id = $1`,
       [strategyId]
@@ -91,20 +103,7 @@ export class DCAService {
       return null;
     }
 
-    const row = result.rows[0];
-    return {
-      strategyId: row.strategyId,
-      smartAccountId: row.smartAccountId,
-      fromToken: row.fromToken,
-      toToken: row.toToken,
-      fromChainId: row.fromChainId,
-      toChainId: row.toChainId,
-      amount: row.amount,
-      interval: row.interval as 'daily' | 'weekly' | 'monthly',
-      lastExecuted: row.lastExecuted,
-      nextExecution: row.nextExecution,
-      isActive: row.isActive
-    };
+    return this.mapRow(result.rows[0]);
   }
 
   /**
@@ -115,6 +114,7 @@ export class DCAService {
       `SELECT
         id as "strategyId",
         smart_account_address as "smartAccountId",
+        action_type as "actionType",
         from_token as "fromToken",
         to_token as "toToken",
         from_chain_id as "fromChainId",
@@ -123,26 +123,18 @@ export class DCAService {
         "interval",
         last_executed as "lastExecuted",
         next_execution as "nextExecution",
-        is_active as "isActive"
+        is_active as "isActive",
+        protocol,
+        lending_action as "lendingAction",
+        amount_b as "amountB",
+        token_b as "tokenB"
        FROM dca_strategies
        WHERE smart_account_address = $1
        ORDER BY created_at DESC`,
       [smartAccountId]
     );
 
-    return result.rows.map(row => ({
-      strategyId: row.strategyId,
-      smartAccountId: row.smartAccountId,
-      fromToken: row.fromToken,
-      toToken: row.toToken,
-      fromChainId: row.fromChainId,
-      toChainId: row.toChainId,
-      amount: row.amount,
-      interval: row.interval as 'daily' | 'weekly' | 'monthly',
-      lastExecuted: row.lastExecuted,
-      nextExecution: row.nextExecution,
-      isActive: row.isActive
-    }));
+    return result.rows.map(row => this.mapRow(row));
   }
 
   /**
@@ -278,11 +270,35 @@ export class DCAService {
    */
   private getIntervalSeconds(interval: 'daily' | 'weekly' | 'monthly'): number {
     const intervals = {
-      daily: 86400,      // 24 hours
-      weekly: 604800,    // 7 days
-      monthly: 2592000   // 30 days
+      daily: 86400,
+      weekly: 604800,
+      monthly: 2592000
     };
 
     return intervals[interval];
+  }
+
+  /**
+   * Map a database row to a DCAStrategy
+   */
+  private mapRow(row: any): DCAStrategy {
+    return {
+      strategyId: row.strategyId,
+      smartAccountId: row.smartAccountId,
+      actionType: (row.actionType || 'swap') as StrategyActionType,
+      fromToken: row.fromToken,
+      toToken: row.toToken,
+      fromChainId: row.fromChainId,
+      toChainId: row.toChainId,
+      amount: row.amount,
+      interval: row.interval as 'daily' | 'weekly' | 'monthly',
+      lastExecuted: row.lastExecuted,
+      nextExecution: row.nextExecution,
+      isActive: row.isActive,
+      protocol: row.protocol || undefined,
+      lendingAction: row.lendingAction || undefined,
+      amountB: row.amountB || undefined,
+      tokenB: row.tokenB || undefined,
+    };
   }
 }

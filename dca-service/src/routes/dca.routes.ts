@@ -246,8 +246,18 @@ export function dcaRoutes() {
 
       const request: CreateStrategyRequest & { userAddress?: string; depositAmount?: string } = req.body;
 
+      // Default actionType to 'swap' for backwards compatibility
+      if (!request.actionType) {
+        request.actionType = 'swap';
+      }
+
       if (!request.fromToken || !request.toToken || !request.amount || !request.interval) {
         return res.status(400).json({ error: 'Missing required fields' });
+      }
+
+      // Validate LP strategies have both amounts
+      if (request.actionType === 'liquidity_pool' && !request.amountB) {
+        return res.status(400).json({ error: 'amountB is required for liquidity_pool strategies' });
       }
 
       // ── Base chain → DCAVault (non-custodial, returns unsigned bundle) ─────

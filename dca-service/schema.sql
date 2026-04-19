@@ -41,6 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_session_keys_expires_at ON session_keys(expires_a
 CREATE TABLE IF NOT EXISTS dca_strategies (
   id VARCHAR(255) PRIMARY KEY,
   smart_account_address VARCHAR(255) NOT NULL,
+  action_type VARCHAR(30) NOT NULL DEFAULT 'swap' CHECK (action_type IN ('swap', 'lending', 'liquid_staking', 'liquidity_pool')),
   from_token VARCHAR(255) NOT NULL,
   to_token VARCHAR(255) NOT NULL,
   from_chain_id INTEGER NOT NULL,
@@ -50,9 +51,22 @@ CREATE TABLE IF NOT EXISTS dca_strategies (
   last_executed BIGINT NOT NULL DEFAULT 0,
   next_execution BIGINT NOT NULL,
   is_active BOOLEAN NOT NULL DEFAULT true,
+  -- Lending-specific
+  protocol VARCHAR(50),
+  lending_action VARCHAR(20) CHECK (lending_action IN ('supply', 'borrow')),
+  -- LP-specific
+  amount_b VARCHAR(255),
+  token_b VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (smart_account_address) REFERENCES smart_accounts(address) ON DELETE CASCADE
 );
+
+-- Migration: add action_type column if upgrading from older schema
+-- ALTER TABLE dca_strategies ADD COLUMN IF NOT EXISTS action_type VARCHAR(30) NOT NULL DEFAULT 'swap';
+-- ALTER TABLE dca_strategies ADD COLUMN IF NOT EXISTS protocol VARCHAR(50);
+-- ALTER TABLE dca_strategies ADD COLUMN IF NOT EXISTS lending_action VARCHAR(20);
+-- ALTER TABLE dca_strategies ADD COLUMN IF NOT EXISTS amount_b VARCHAR(255);
+-- ALTER TABLE dca_strategies ADD COLUMN IF NOT EXISTS token_b VARCHAR(255);
 
 CREATE INDEX IF NOT EXISTS idx_dca_strategies_smart_account ON dca_strategies(smart_account_address);
 CREATE INDEX IF NOT EXISTS idx_dca_strategies_next_execution ON dca_strategies(next_execution);
