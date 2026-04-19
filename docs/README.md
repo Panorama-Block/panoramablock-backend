@@ -1,7 +1,7 @@
 # PanoramaBlock Backend Docs
 
 ## Overview
-- [Architecture and service overview](./overview/DOCUMENTACAO.md)
+- [Architecture and service overview](./overview/OVERVIEW.md)
 
 ## API and Specs
 - [Staking and Lending API reference](./api/STAKING_LENDING_API_REFERENCE.md)
@@ -19,10 +19,8 @@
 - [Staking and Lending DB handoff 2026-02-17](./handoffs/STAKING_LENDING_DB_HANDOFF_2026-02-17.md)
 
 ## Integrations and Runbooks
-- [Lido service integration (PT)](./integrations/LIDO_SERVICE_INTEGRATION.md)
-- [Lido service integration (EN)](./integrations/LIDO_SERVICE_INTEGRATION_EN.md)
-- [Lido Telegram liquid staking (PT)](./integrations/LIDO_TELEGRAM_LIQUID_STAKING.md)
-- [Lido Telegram liquid staking (EN)](./integrations/LIDO_TELEGRAM_LIQUID_STAKING_EN.md)
+- [Lido service integration](./integrations/LIDO_SERVICE_INTEGRATION.md)
+- [Lido Telegram liquid staking](./integrations/LIDO_TELEGRAM_LIQUID_STAKING.md)
 - [Local Docker workflow](./runbooks/LOCAL_DOCKER_WORKFLOW.md)
 - [Local test runbook (Staking + Lending)](./runbooks/LOCAL_TEST_RUNBOOK_STAKING_LENDING.md)
 

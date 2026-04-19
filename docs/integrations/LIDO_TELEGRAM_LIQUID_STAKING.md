@@ -1,171 +1,169 @@
 # PanoramaBlock — Lido Service + Telegram MiniApp (Liquid Staking)
-Análise do projeto, arquitetura, integrações, modelagem de dados e plano de entrega.
+Project analysis, architecture, integrations, data model, and delivery plan.
 
-> English version: `panorama-block-backend/LIDO_TELEGRAM_LIQUID_STAKING_EN.md`
-
-> Escopo principal deste documento: entender como o `lido-service` funciona hoje, como ele se integra com o frontend do Telegram (MiniApp), e como suportar **stake/unstake/posições/tx/info** com **dois modos de saída**:
-> 1) **Instant via Swap** (stETH → ETH)  
+> Main scope: understand how `lido-service` works today, how it integrates with the Telegram MiniApp frontend, and how to support **stake/unstake/positions/tx/info** with **two exit modes**:
+> 1) **Instant via Swap** (stETH → ETH)
 > 2) **Native Withdrawal Queue** (approve → request → wait → claim).
 
 ---
 
-## 1) Mapa do monorepo
+## 1) Monorepo map
 
 ### Backend (`panorama-block-backend/`)
-- `auth-service`: autenticação centralizada (SIWE/thirdweb), emissão/validação de JWT e sessões em Redis.
-- `liquid-swap-service`: swap não-custodial (quote/tx bundle/status/history) com Uniswap Trading API / (opcional) Smart Router / thirdweb.
-- `lido-service`: staking Lido em Ethereum (stake, withdrawal queue, posição, info, tracking/persistência).
-- Outros serviços: `bridge-service`, `dca-service`, `lending-service`, `wallet-tracker-service`, etc.
+- `auth-service`: centralized auth (SIWE/thirdweb), JWT issuance/validation, Redis sessions.
+- `liquid-swap-service`: non-custodial swap (quote/tx bundle/status/history) via Uniswap Trading API / (optional) Smart Router / thirdweb.
+- `lido-service`: Lido staking on Ethereum (stake, withdrawal queue, position, info, tracking/persistence).
+- Other services: `bridge-service`, `dca-service`, `lending-service`, etc.
 
 ### Telegram (`telegram/`)
-- `apps/miniapp`: Next.js (basePath `/miniapp`) com páginas de staking, swap, chat, portfolio etc.
-- `apps/gateway`: Fastify + grammy; proxy para `/miniapp/*` e `/swap/*`.
+- `apps/miniapp`: Next.js (basePath `/miniapp`) with staking, swap, chat, portfolio pages, etc.
+- `apps/gateway`: Fastify + grammy; proxy for `/miniapp/*` and `/swap/*`.
 
-> Referência de arquitetura do backend (auth/swap) já existe em `panorama-block-backend/DOCUMENTACAO.md`.
+> Backend architecture reference (auth/swap) is documented in `panorama-block-backend/docs/overview/OVERVIEW.md`.
 
 ---
 
-## 2) Autenticação (padrão do ecossistema)
+## 2) Authentication (ecosystem standard)
 
-O padrão do projeto é **JWT centralizado** no `auth-service`:
-1. `POST /auth/login` → gera payload SIWE.
-2. Cliente assina a mensagem.
-3. `POST /auth/verify` → recebe JWT (`token`) + cookie refresh.
-4. Serviços (swap/lido/…) validam o JWT chamando `POST /auth/validate`.
+The project standard is **centralized JWT auth** via `auth-service`:
+1. `POST /auth/login` → generates SIWE payload.
+2. Client signs the message.
+3. `POST /auth/verify` → returns JWT (`token`) + refresh cookie.
+4. Other services (swap/lido/…) validate the JWT by calling `POST /auth/validate`.
 
-No `lido-service`, rotas que criam transação exigem:
+In `lido-service`, routes that **prepare transactions** require:
 - `Authorization: Bearer <token>`
-- e `userAddress` no body deve bater com o endereço do JWT (proteção contra “impersonation”).
+- and `userAddress` in the request body must match the JWT address (anti-impersonation).
 
-Arquivos importantes:
+Key files:
 - `panorama-block-backend/auth-service/src/routes/auth.ts`
 - `panorama-block-backend/lido-service/src/infrastructure/http/middleware/auth.ts`
 
 ---
 
-## 3) Lido Service (backend) — como funciona
+## 3) Lido Service (backend) — how it works
 
-### 3.1 Responsabilidade
-O `lido-service` **não custodia** fundos:
-- Ele **prepara** `transactionData` (to/data/value/gasLimit/chainId) para o cliente assinar/enviar.
-- ✅ **Decisão:** não existe execução via `privateKey` no backend (removido). O fluxo é 100% non-custodial.
+### 3.1 Responsibility
+`lido-service` is **non-custodial**:
+- It **prepares** `transactionData` (to/data/value/gasLimit/chainId) for the client to sign and send.
+- There is no `privateKey` execution path in the backend (removed). The flow is 100% non-custodial.
 
-### 3.2 Contratos e chamadas on-chain (Ethereum Mainnet)
-O repositório (`LidoRepository`) usa `ethers` para interagir com:
-- `stETH` (Lido): `submit(referral)` para stake.
-- `wstETH`: `balanceOf` e `getStETHByWstETH` para converter wstETH → “equivalente em stETH”.
-- `WithdrawalQueue`:  
-  - `requestWithdrawals([amount], owner)` para entrar na fila de saque  
-  - `getWithdrawalRequests(owner)` / `getWithdrawalStatus(ids)` para listar status  
-  - `findCheckpointHints(ids, from, to)` + `claimWithdrawals(ids, hints)` para claim.
+### 3.2 On-chain contracts (Ethereum Mainnet)
+The repository (`LidoRepository`) uses `ethers` to interact with:
+- `stETH` (Lido): `submit(referral)` for stake.
+- `wstETH`: `balanceOf` and `getStETHByWstETH` to convert wstETH → "stETH equivalent".
+- `WithdrawalQueue`:
+  - `requestWithdrawals([amount], owner)` to enter the withdrawal queue
+  - `getWithdrawalRequests(owner)` / `getWithdrawalStatus(ids)` to list status
+  - `findCheckpointHints(ids, from, to)` + `claimWithdrawals(ids, hints)` to claim.
 
-Arquivos importantes:
+Key files:
 - `panorama-block-backend/lido-service/src/infrastructure/config/lidoContracts.ts`
 - `panorama-block-backend/lido-service/src/infrastructure/repositories/LidoRepository.ts`
 
-### 3.3 Endpoints principais
-- `POST /api/lido/stake` (JWT + body.userAddress) → prepara stake ETH→stETH
-- `POST /api/lido/unstake` (JWT + body.userAddress) → prepara “withdrawal request” (stETH→WithdrawalQueue)
-  - pode exigir **2 passos**: `unstake_approval` → depois `unstake`
-- `GET /api/lido/position/:userAddress` → lê on-chain e retorna posição (padronizado em **wei strings**)
-- `GET /api/lido/protocol/info` → info do protocolo (ex.: total staked em **wei string**)
-- `GET /api/lido/history/:userAddress?limit=...` → histórico persistido (se DB configurado)
-- `GET /api/lido/portfolio/:userAddress?days=30` → snapshot persistido (assets + métricas diárias)
-- `GET /api/lido/withdrawals/:userAddress` → lista requests da fila + status
-- `POST /api/lido/withdrawals/claim` (JWT + body.userAddress) → prepara claim de withdrawals finalizados
-- `POST /api/lido/transaction/submit` (JWT + body.userAddress) → registra `txHash` para histórico/status
-- `GET /api/lido/transaction/:hash` → consulta receipt e atualiza status (quando persistência ativa)
+### 3.3 Main endpoints
+- `POST /api/lido/stake` (JWT + body.userAddress) → prepares stake ETH→stETH
+- `POST /api/lido/unstake` (JWT + body.userAddress) → prepares "withdrawal request" (stETH→WithdrawalQueue)
+  - may require **2 steps**: `unstake_approval` → then `unstake`
+- `GET /api/lido/position/:userAddress` → reads on-chain and returns position (standardized as **wei strings**)
+- `GET /api/lido/protocol/info` → protocol info (e.g. total staked as **wei string**)
+- `GET /api/lido/history/:userAddress?limit=...` → persisted history (if DB configured)
+- `GET /api/lido/portfolio/:userAddress?days=30` → persisted snapshot (assets + daily metrics)
+- `GET /api/lido/withdrawals/:userAddress` → lists withdrawal requests + status
+- `POST /api/lido/withdrawals/claim` (JWT + body.userAddress) → prepares claim for finalized withdrawals
+- `POST /api/lido/transaction/submit` (JWT + body.userAddress) → stores `txHash` for history/status
+- `GET /api/lido/transaction/:hash` → checks receipt and updates status (when persistence is enabled)
 
-> Observação importante sobre unidades:
-> - **Inputs** de stake/unstake: string decimal em ETH/stETH (ex.: `"0.05"`).
-> - **Outputs** de position/protocol/history: valores monetários retornam como **wei strings** para padronização.
+> Units (important):
+> - **Inputs** (`stake/unstake`): decimal string in ETH/stETH (e.g. `"0.05"`).
+> - **Outputs** (`position/protocol/history`): monetary values are returned as **wei strings** (standard).
 
 ---
 
-## 4) “Unstake”: os dois modos (como pedido)
+## 4) "Unstake": the two modes
 
-### Modo 1 — Instant via Swap (stETH → ETH)
-O “unstake instantâneo” **não é um saque do protocolo** — é um **swap** no mercado:
-- Usuário vende `stETH` e recebe `ETH` imediatamente.
-- Vantagens: velocidade (quase imediata), UX simples.
-- Desvantagens: slippage, taxa, preço pode não ser 1:1.
+### Mode 1 — Instant via Swap (stETH → ETH)
+Instant "unstake" is **not a protocol withdrawal** — it's a **market swap**:
+- User sells `stETH` and receives `ETH` immediately.
+- Pros: fast (near instant), simple UX.
+- Cons: slippage, fees, price may not be 1:1.
 
-Como fica no seu sistema:
-- Reusa o **fluxo já existente de Swap** (mesma filosofia não-custodial, mesmo UX, mesmo histórico do swap).
-- Na página de staking, há um CTA que abre `/swap` com prefill stETH→ETH em Ethereum.
+How it fits the system:
+- Reuses the **existing Swap flow** (same non-custodial philosophy, same UX, same swap history).
+- On the staking page, there is a CTA that opens `/swap` with prefilled stETH→ETH on Ethereum.
 
-Arquivos importantes:
-- `telegram/apps/miniapp/src/app/staking/page.tsx` (CTA “Instant Unstake via Swap”)
-- `telegram/apps/miniapp/src/app/swap/page.tsx` (prefill via querystring)
+Key files:
+- `telegram/apps/miniapp/src/app/staking/page.tsx` (CTA "Instant Unstake via Swap")
+- `telegram/apps/miniapp/src/app/swap/page.tsx` (querystring prefill)
 - `telegram/apps/miniapp/src/features/swap/*` (quote/tx)
 
-### Modo 2 — Native Withdrawal Queue (approve → request → wait → claim)
-Aqui o usuário faz o “unstake” nativo do Lido via Withdrawal Queue:
-1. (se necessário) **Approve** `stETH` para a WithdrawalQueue
+### Mode 2 — Native Withdrawal Queue (approve → request → wait → claim)
+Here the user performs a native Lido withdrawal via the Withdrawal Queue:
+1. (if needed) **Approve** `stETH` to the WithdrawalQueue
 2. **Request** `requestWithdrawals([amount], owner)`
-3. Aguardar finalizar (tempo variável, depende da fila/protocolo)
-4. **Claim** `claimWithdrawals(ids, hints)` quando `isFinalized=true`
+3. Wait until finalized (time varies, depends on the queue/protocol)
+4. **Claim** `claimWithdrawals(ids, hints)` when `isFinalized=true`
 
-Vantagens:
-- Não depende de liquidez de mercado (sem slippage)
-- É o fluxo “nativo” do protocolo
+Pros:
+- No dependency on market liquidity (no slippage)
+- The "native" protocol flow
 
-Desvantagens:
-- Não é instantâneo (há espera)
-- Exige `stETH` (se usuário tiver `wstETH`, precisa unwrap ou swap antes)
+Cons:
+- Not instant (there is waiting)
+- Requires `stETH` (if user has `wstETH`, they must unwrap or swap first)
 
 ---
 
-## 5) Persistência (DB) — posições, txs, history, withdrawals
+## 5) Persistence (DB) — positions, txs, history, withdrawals
 
-### 5.1 Por que persistir?
-Sem DB, você consegue:
-- posição e protocol info (on-chain / API)
+### 5.1 Why persist?
+Without a DB you can still:
+- fetch position and protocol info (on-chain / API)
 
-Mas com DB você ganha:
-- **histórico** por usuário (txs que o app preparou/executou)
-- **status** de transações
-- base para **rendimentos** e **portfolio** por snapshots (time series)
+With a DB you additionally get:
+- per-user **activity history** (transactions the app prepared/executed)
+- **transaction status** tracking
+- a foundation for **yield/portfolio** analytics via snapshots (time series)
 
-### 5.2 Schema atual do lido-service
-Arquivo: `panorama-block-backend/lido-service/schema.sql`
+### 5.2 Current `lido-service` schema
+File: `panorama-block-backend/lido-service/schema.sql`
 
-Tabelas:
-- `lido_users`: dono das posições (address).
-- `lido_positions_current`: última posição conhecida (stETH/wstETH/total/apY/block).
-- `lido_position_snapshots`: snapshots no tempo (para analytics).
-- `lido_transactions`: transações preparadas (inclui `tx_data`) e `tx_hash` após o cliente enviar.
-- `lido_withdrawal_requests`: requests da Withdrawal Queue + status.
-- `lido_portfolio_assets`: “assets atuais” (stETH + wstETH) por usuário.
-- `lido_portfolio_metrics_daily`: métricas diárias (time series) por usuário.
-- `lido_user_links`: opcional (wallet ↔ telegram user / tenant), se você quiser unificar identidade.
+Tables:
+- `lido_users`: address ownership.
+- `lido_positions_current`: latest known position (stETH/wstETH/total/apy/block).
+- `lido_position_snapshots`: time-series snapshots (analytics).
+- `lido_transactions`: prepared transactions (includes `tx_data`) + `tx_hash` after client submits.
+- `lido_withdrawal_requests`: withdrawal queue requests + status.
+- `lido_portfolio_assets`: current assets (stETH + wstETH) per user.
+- `lido_portfolio_metrics_daily`: daily metrics (time series) per user.
+- `lido_user_links`: optional (wallet ↔ telegram user / tenant), if you want unified identity.
 
 Bootstrap:
-- `panorama-block-backend/lido-service/src/infrastructure/database/database.service.ts` inicializa `schema.sql` quando `DATABASE_URL` existe.
+- `panorama-block-backend/lido-service/src/infrastructure/database/database.service.ts` initializes `schema.sql` when `DATABASE_URL` is set.
 
-> DB “já existente hoje”: vamos usar **o mesmo Postgres**, isolando o Lido num schema dedicado via `LIDO_DB_SCHEMA` (default: `lido`).
+> Existing DB: we will use the **same Postgres**, isolating Lido tables in a dedicated schema via `LIDO_DB_SCHEMA` (default: `lido`).
 
-### 5.3 “Tabelas complexas” (rendimentos/portfolio/user info) — baseline implementado
-Para suportar **portfolio** sem mocks, já adicionamos um baseline simples (extensível):
+### 5.3 "Complex tables" (yield/portfolio/user info) — baseline implemented
+To support **portfolio** without mocks, a simple baseline (extensible) was added:
 - `lido_portfolio_assets`:
   - `(address, chain_id, token_symbol, token_address, balance_wei, updated_at)`
 - `lido_portfolio_metrics_daily`:
   - `(address, chain_id, date, steth_balance_wei, wsteth_balance_wei, total_staked_wei, apy_bps, updated_at)`
-- `lido_user_links` (opcional):
+- `lido_user_links` (optional):
   - `(address, telegram_user_id, tenant_id, metadata, created_at, updated_at)`
 
-> Importante: “rendimentos” em Lido não é um “claim” clássico; em stETH (rebase) a posição cresce com o tempo. Para calcular yield real, você precisa ajustar por depósitos/saques (eventos) e comparar snapshots.
+> Note: Lido "rewards" are not a classic claim; stETH is rebasing and the position increases over time. To compute yield you need to account for deposits/withdrawals and compare snapshots.
 
 ---
 
-## 6) Telegram MiniApp — onde exibir e como integrar
+## 6) Telegram MiniApp — where to display and how to integrate
 
-### 6.1 Páginas envolvidas
+### 6.1 Relevant pages
 - Liquid Staking: `telegram/apps/miniapp/src/app/staking/page.tsx`
 - Swap: `telegram/apps/miniapp/src/app/swap/page.tsx`
 
-### 6.2 Cliente de API (staking)
-Arquivo: `telegram/apps/miniapp/src/features/staking/api.ts`
+### 6.2 Staking API client
+File: `telegram/apps/miniapp/src/features/staking/api.ts`
 - `getTokens()`
 - `getUserPosition()`
 - `stake(amount)`
@@ -176,79 +174,78 @@ Arquivo: `telegram/apps/miniapp/src/features/staking/api.ts`
 - `getPortfolio(days)`
 - `submitTransactionHash(id, txHash)`
 
-### 6.3 Proxy/rewrites para o backend
-Arquivo: `telegram/apps/miniapp/next.config.ts`
-- Reescreve `/api/staking/*` para `NEXT_PUBLIC_STAKING_API_URL` (ou `VITE_STAKING_API_URL`).
+### 6.3 Proxy/rewrites to the backend
+File: `telegram/apps/miniapp/next.config.ts`
+- Rewrites `/api/staking/*` to `NEXT_PUBLIC_STAKING_API_URL` (or `VITE_STAKING_API_URL`).
 
-Isso permite no MiniApp:
-- `baseUrl = '/api/staking'` (padrão) → proxy para o host real do backend.
+This enables:
+- `baseUrl = '/api/staking'` (default) → proxies to the real backend host.
 
 ---
 
-## 7) Fluxos end-to-end (o que testar)
+## 7) End-to-end flows (what to test)
 
 ### 7.1 Stake (ETH → stETH)
-1. MiniApp pega JWT (auth-service).
-2. `POST /api/lido/stake` retorna `transactionData`.
-3. Cliente assina/envia (smart wallet / metamask).
-4. Cliente chama `POST /api/lido/transaction/submit` com `{ id, userAddress, transactionHash }`.
-5. `GET /api/lido/history/:address` passa a incluir a tx (quando DB ativo).
+1. MiniApp obtains JWT (auth-service).
+2. `POST /api/lido/stake` returns `transactionData`.
+3. Client signs/sends (smart wallet / MetaMask).
+4. Client calls `POST /api/lido/transaction/submit` with `{ id, userAddress, transactionHash }`.
+5. `GET /api/lido/history/:address` includes the tx (when DB enabled).
 
 ### 7.2 Withdrawal Queue (stETH → request → claim ETH)
 1. `POST /api/lido/unstake`
-2. Se vier `type=unstake_approval`, executar; depois chamar `unstake` novamente.
-3. Aguardar request aparecer em `GET /api/lido/withdrawals/:address`.
-4. Quando `isFinalized=true`, chamar `POST /api/lido/withdrawals/claim`.
-5. Executar `withdrawal_claim` tx e enviar `transaction/submit`.
+2. If `type=unstake_approval`, execute it; then call `unstake` again.
+3. Wait for the request to show up in `GET /api/lido/withdrawals/:address`.
+4. When `isFinalized=true`, call `POST /api/lido/withdrawals/claim`.
+5. Execute the `withdrawal_claim` tx and `transaction/submit`.
 
 ### 7.3 Instant via Swap (stETH → ETH)
-1. No `/staking`, clicar “Instant Unstake via Swap”.
-2. `/swap` abre com prefill (chain 1, sell stETH, buy ETH, amount opcional).
-3. Fazer quote → preparar tx → assinar/enviar.
-4. (Opcional) consolidar no futuro num “portfolio unified history”.
+1. On `/staking`, click "Instant Unstake via Swap".
+2. `/swap` opens prefilled (chain 1, sell stETH, buy ETH, optional amount).
+3. Quote → prepare tx → sign/send.
+4. (Optional) unify into a single "portfolio history" later.
 
 ---
 
-## 8) Checklist de testes (scripts + manual)
+## 8) Test checklist (scripts + manual)
 
 ### Backend (docker-compose)
-1. Subir stack: `panorama-block-backend/docker-compose.yml`
-2. Garantir:
-   - `AUTH_SERVICE_URL` configurado
-   - `ETHEREUM_RPC_URL` válido
-   - `DATABASE_URL`/`LIDO_DATABASE_URL` válido (para persistência)
-3. Testar endpoints:
+1. Start stack: `panorama-block-backend/docker-compose.yml`
+2. Ensure:
+   - `AUTH_SERVICE_URL` configured
+   - `ETHEREUM_RPC_URL` valid
+   - `DATABASE_URL`/`LIDO_DATABASE_URL` valid (for persistence)
+3. Test endpoints:
    - `/api/lido/protocol/info`
    - `/api/lido/position/:address`
-   - `stake` / `unstake` (fluxo 2 passos)
+   - `stake` / `unstake` (2-step flow)
    - `withdrawals` / `withdrawals/claim`
    - `transaction/submit` / `transaction/:hash`
 
-Scripts úteis:
+Useful scripts:
 - `panorama-block-backend/lido-service/tests/quick-test.sh`
 - `panorama-block-backend/lido-service/tests/test-lido-api.sh`
 
 ### Frontend (MiniApp)
-1. Ver `NEXT_PUBLIC_STAKING_API_URL` apontando para o gateway/backend correto.
-2. Abrir `/miniapp/staking`:
-   - posição aparece (stETH e wstETH)
-   - botão “Request Withdrawal (Lido Queue)”
-   - botão “Instant Unstake via Swap”
-   - seção “Withdrawals” lista requests
-   - seção “Activity” lista histórico (quando DB ativo)
+1. Ensure `NEXT_PUBLIC_STAKING_API_URL` points to the correct gateway/backend.
+2. Open `/miniapp/staking`:
+   - position shows (stETH and wstETH)
+   - "Request Withdrawal (Lido Queue)" button
+   - "Instant Unstake via Swap" button
+   - "Withdrawals" section lists queue requests
+   - "Activity" section shows history (when DB enabled)
 
 ---
 
-## 9) Perguntas abertas (para continuarmos passo a passo)
+## 9) Open questions
 
-1) **DB “já existente hoje”**: você quer guardar as tabelas do Lido:
-   - no mesmo Postgres do `engine_postgres` (compose), ou
-   - em outro banco/cluster já usado pelo produto?
+1) **Your existing DB**: where should Lido tables live?
+   - the same `engine_postgres` (compose), or
+   - another database/cluster already used by PanoramaBlock?
 
-2) **Rendimentos/portfolio**: qual formato você quer exibir no Telegram?
-   - “P&L” em ETH? em USD? ambos?
-   - períodos: 24h/7d/30d/all?
-   - quer “apr/apy histórico” (curva), ou só números?
+2) **Yield/portfolio UX**: what format do you want inside Telegram?
+   - P&L in ETH? USD? both?
+   - time windows: 24h/7d/30d/all?
+   - do you want historical APR/APY curves, or just summary numbers?
 
-3) **Item 4 (privateKey execution)**: confirmar se:
-   - ✅ **Decisão:** removemos totalmente o caminho `privateKey` do backend (fluxo 100% non-custodial).
+3) **Non-custodial confirmation**: the `privateKey` execution path has been removed from the backend (100% non-custodial flow).
