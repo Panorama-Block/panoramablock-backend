@@ -139,6 +139,29 @@ services:
     volumes:
       - ./shared/token-registry.json:/app/shared/token-registry.json:ro
 
+  database_gateway:
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+      args:
+        DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@engine_postgres:5432/panorama_data_gateway?schema=public
+    container_name: panorama-database-gateway
+    ports:
+      - "${DATABASE_GATEWAY_PORT:-8082}:8080"
+    environment:
+      - PORT=8080
+      - NODE_ENV=${NODE_ENV}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@engine_postgres:5432/panorama_data_gateway?schema=public
+      - JWT_SECRET=${DB_GATEWAY_JWT_SECRET:-resignedllatterleskimolunlistedldudelresetlmute}
+    depends_on:
+      engine_postgres:
+        condition: service_healthy
+      engine_postgres_bootstrap:
+        condition: service_completed_successfully
+    command: sh -c "npm run migrate:deploy && npm run start"
+    restart: unless-stopped
+
 
   liquid_swap_service:
     build:
