@@ -17,6 +17,9 @@ services:
   bridge_service:
     profiles: ["bridge"]
 
+  database_gateway:
+    profiles: ["gateway"]
+
   liquid_swap_service:
     profiles: ["swap"]
 

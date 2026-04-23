@@ -132,20 +132,28 @@ module "keyvault" {
 module "postgres" {
   source = "./modules/postgres"
 
-  resource_group_name    = azurerm_resource_group.main.name
-  location               = azurerm_resource_group.main.location
-  name_prefix            = local.name_prefix
-  administrator_login    = var.postgres_admin_username
-  administrator_password = var.postgres_admin_password
-  sku_name               = var.postgres_sku_name
-  postgres_version       = var.postgres_version
-  storage_mb             = var.postgres_storage_mb
-  backup_retention_days  = var.postgres_backup_retention_days
-  delegated_subnet_id    = module.network.postgres_subnet_id
-  virtual_network_id     = module.network.vnet_id
-  database_names         = var.postgres_databases
-  zone                   = var.postgres_zone
-  tags                   = local.common_tags
+  resource_group_name           = azurerm_resource_group.main.name
+  location                      = azurerm_resource_group.main.location
+  server_location               = var.postgres_location
+  name_prefix                   = local.name_prefix
+  server_name                   = var.postgres_server_name
+  administrator_login           = var.postgres_admin_username
+  administrator_password        = var.postgres_admin_password
+  active_directory_auth_enabled = var.postgres_active_directory_auth_enabled
+  password_auth_enabled         = var.postgres_password_auth_enabled
+  auth_tenant_id                = var.postgres_active_directory_auth_enabled ? coalesce(var.postgres_auth_tenant_id, data.azurerm_client_config.current.tenant_id) : var.postgres_auth_tenant_id
+  sku_name                      = var.postgres_sku_name
+  postgres_version              = var.postgres_version
+  storage_mb                    = var.postgres_storage_mb
+  backup_retention_days         = var.postgres_backup_retention_days
+  delegated_subnet_id           = module.network.postgres_subnet_id
+  virtual_network_id            = module.network.vnet_id
+  private_network_enabled       = var.postgres_private_network_enabled
+  public_network_access_enabled = var.postgres_public_network_access_enabled
+  firewall_rules                = var.postgres_firewall_rules
+  database_names                = var.postgres_databases
+  zone                          = var.postgres_zone
+  tags                          = local.common_tags
 }
 
 resource "azurerm_key_vault_access_policy" "terraform_operator" {

@@ -87,10 +87,40 @@ variable "postgres_admin_username" {
   default     = "pgadmin"
 }
 
+variable "postgres_server_name" {
+  description = "Optional exact PostgreSQL Flexible Server name. Use this when importing an existing server."
+  type        = string
+  default     = null
+}
+
+variable "postgres_location" {
+  description = "Optional PostgreSQL server region. Defaults to the resource group location."
+  type        = string
+  default     = null
+}
+
 variable "postgres_admin_password" {
   description = "Admin password for PostgreSQL Flexible Server."
   type        = string
   sensitive   = true
+}
+
+variable "postgres_active_directory_auth_enabled" {
+  description = "Enable Microsoft Entra authentication for PostgreSQL Flexible Server."
+  type        = bool
+  default     = false
+}
+
+variable "postgres_password_auth_enabled" {
+  description = "Enable password authentication for PostgreSQL Flexible Server."
+  type        = bool
+  default     = true
+}
+
+variable "postgres_auth_tenant_id" {
+  description = "Tenant ID used for PostgreSQL Microsoft Entra authentication. Defaults to the active Azure tenant when Entra auth is enabled."
+  type        = string
+  default     = null
 }
 
 variable "postgres_sku_name" {
@@ -121,6 +151,27 @@ variable "postgres_zone" {
   description = "Availability zone. Leave null if you do not care."
   type        = string
   default     = null
+}
+
+variable "postgres_private_network_enabled" {
+  description = "Create PostgreSQL with VNet delegated subnet and private DNS."
+  type        = bool
+  default     = true
+}
+
+variable "postgres_public_network_access_enabled" {
+  description = "Enable public network access for PostgreSQL Flexible Server."
+  type        = bool
+  default     = false
+}
+
+variable "postgres_firewall_rules" {
+  description = "Firewall rules for PostgreSQL Flexible Server when public network access is enabled."
+  type = map(object({
+    start_ip_address = string
+    end_ip_address   = string
+  }))
+  default = {}
 }
 
 variable "postgres_databases" {

@@ -11,5 +11,5 @@ output "fqdn" {
 }
 
 output "private_dns_zone_name" {
-  value = azurerm_private_dns_zone.this.name
+  value = try(azurerm_private_dns_zone.this[0].name, null)
 }
