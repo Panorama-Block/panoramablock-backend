@@ -235,6 +235,7 @@ jobs:
             set -a
             source .env.production
             set +a
+            echo "$GHCR_PASSWORD" | docker login "${GHCR_REGISTRY:-ghcr.io}" -u "$GHCR_USERNAME" --password-stdin
             docker pull "${GHCR_REGISTRY}/${{ steps.meta.outputs.namespace }}/database-gateway:${IMAGE_TAG}"
             docker run --rm \
               -e DATABASE_URL="postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@${POSTGRES_HOST}:5432/panorama_data_gateway?sslmode=require" \
