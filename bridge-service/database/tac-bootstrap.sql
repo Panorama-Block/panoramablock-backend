@@ -9,6 +9,10 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'tac_service') \gexec
 SELECT format('CREATE DATABASE panorama_dca OWNER %I', current_user)
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'panorama_dca') \gexec
 
+-- Shared DB for the generic Panorama data gateway used by Zico chat persistence.
+SELECT format('CREATE DATABASE panorama_data_gateway OWNER %I', current_user)
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'panorama_data_gateway') \gexec
+
 \connect tac_service
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

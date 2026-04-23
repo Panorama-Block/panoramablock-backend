@@ -10,6 +10,31 @@ telegram_gateway_vm_size    = "Standard_B1ms"
 telegram_gateway_app_directory = "/opt/telegram-gateway"
 postgres_admin_username   = "pgadmin"
 postgres_admin_password   = "replace-me"
+# Use these when importing an existing manually-created PostgreSQL server.
+# postgres_server_name                  = "panoramadevpg2"
+# postgres_location                     = "canadacentral"
+# postgres_admin_username               = "panorama_app"
+# postgres_sku_name                     = "B_Standard_B2s"
+# postgres_version                      = "17"
+# postgres_zone                         = "3"
+# postgres_private_network_enabled      = false
+# postgres_public_network_access_enabled = true
+# postgres_active_directory_auth_enabled = true
+# postgres_password_auth_enabled         = true
+# postgres_auth_tenant_id                = null
+# postgres_databases = [
+#   "panorama_core",
+#   "panorama_dca",
+#   "tac_service",
+#   "panorama_lido",
+#   "panorama_data_gateway",
+# ]
+# postgres_firewall_rules = {
+#   open-port = {
+#     start_ip_address = "0.0.0.0"
+#     end_ip_address   = "255.255.255.255"
+#   }
+# }
 deployment_principal_object_id = "00000000-0000-0000-0000-000000000000"
 
 initial_key_vault_secrets = {
