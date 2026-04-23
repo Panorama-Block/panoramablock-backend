@@ -182,6 +182,19 @@ jobs:
           cp shared/token-registry.json .deploy-tmp/shared/token-registry.json
           chmod +x .deploy-tmp/scripts/*.sh
 
+      - name: Prepare VM permissions
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            APP_DIR=/opt/panorama
+            CURRENT_DIR="${APP_DIR}/current"
+            DEPLOY_USER='${{ secrets.VM_USER }}'
+            sudo install -d -m 2775 -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" "${APP_DIR}" "${CURRENT_DIR}" "${CURRENT_DIR}/scripts" "${CURRENT_DIR}/shared"
+
       - name: Copy bundle to VM
         uses: appleboy/scp-action@v0.1.7
         with:
