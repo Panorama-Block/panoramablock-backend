@@ -219,7 +219,7 @@ variable "telegram_gateway_vm_enabled" {
 variable "telegram_gateway_vm_size" {
   description = "VM size for the Telegram gateway VM."
   type        = string
-  default     = "Standard_B1ms"
+  default     = "Standard_D2as_v5"
 }
 
 variable "telegram_gateway_app_directory" {

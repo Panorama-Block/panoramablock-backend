@@ -28,7 +28,7 @@ resource "azurerm_linux_virtual_machine" "this" {
     azurerm_network_interface.this.id
   ]
   disable_password_authentication = true
-  custom_data                     = base64encode(templatefile("${path.module}/cloud-init.yaml.tftpl", {
+  custom_data = base64encode(templatefile("${path.module}/cloud-init.yaml.tftpl", {
     admin_username = var.admin_username
     app_user       = var.app_user
     app_directory  = var.app_directory
