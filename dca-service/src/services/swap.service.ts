@@ -8,6 +8,29 @@ import { CircuitBreakerManager, CIRCUIT_BREAKERS } from './circuitBreaker.servic
 import { WETH_ADDRESS, SWAP_DEADLINE_SECONDS, MAX_SLIPPAGE_PERCENT } from '../config/swap.config';
 import { AuditLogger, AuditEventType } from './auditLog.service';
 
+function translateBlockchainError(message: string): string {
+  if (!message) return 'Swap execution failed. Please try again.';
+  if (message.includes('AA21') || message.includes('didn\'t pay prefund') || message.includes('prefund')) {
+    return 'Insufficient gas balance in your Panorama Wallet. Please add ETH (or the native token of this network) to cover transaction fees.';
+  }
+  if (message.includes('AA25') || message.includes('invalid account nonce')) {
+    return 'Transaction nonce conflict. Please wait a moment and try again.';
+  }
+  if (message.includes('AA31') || message.includes('paymaster deposit too low')) {
+    return 'Paymaster balance too low. Please contact support.';
+  }
+  if (message.includes('insufficient funds')) {
+    return 'Insufficient token balance in your Panorama Wallet to execute this swap.';
+  }
+  if (message.includes('INSUFFICIENT_OUTPUT_AMOUNT') || message.includes('Too little received')) {
+    return 'Slippage too high — the price moved too much. Try again or increase slippage tolerance.';
+  }
+  if (message.includes('EXPIRED')) {
+    return 'Transaction deadline expired. Please try again.';
+  }
+  return `Swap execution failed: ${message}`;
+}
+
 export interface SwapParams {
   smartAccountAddress: string;
   sessionKey: string;
@@ -333,12 +356,11 @@ export class SwapService {
           },
         });
 
-        const wrappedError = new Error(`Swap execution failed: ${error.message}`);
+        const humanMessage = translateBlockchainError(error.message);
+        const wrappedError = new Error(humanMessage);
 
-        // Insufficient funds is a user-data problem, not a service failure.
-        // Re-throw as a non-circuit-breaker error so it doesn't open the breaker
-        // and block other strategies on the same chain.
-        if (error.message?.includes('insufficient funds')) {
+        // User-data problems (gas, funds) should not open the circuit breaker.
+        if (error.message?.includes('insufficient funds') || error.message?.includes('AA21') || error.message?.includes('prefund')) {
           (wrappedError as any).skipCircuitBreaker = true;
           throw wrappedError;
         }

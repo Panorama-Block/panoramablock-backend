@@ -59,10 +59,11 @@ async function proxyVaultCreate(body: CreateStrategyRequest & { userAddress?: st
   const depositWei = body.depositAmount
     ? toTokenWei(body.depositAmount, body.fromToken)
     : amountWei;
+  const rawAddress = body.userAddress || body.smartAccountId || '';
   const payload = {
-    userAddress: body.userAddress || body.smartAccountId,
-    tokenIn: body.fromToken,
-    tokenOut: body.toToken,
+    userAddress: rawAddress.toLowerCase(),
+    tokenIn: body.fromToken.toLowerCase(),
+    tokenOut: body.toToken.toLowerCase(),
     amountPerSwap: amountWei,
     intervalSeconds,
     depositAmount: depositWei,
@@ -73,7 +74,10 @@ async function proxyVaultCreate(body: CreateStrategyRequest & { userAddress?: st
     body: JSON.stringify(payload),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error((data as any).error || `Execution layer error ${res.status}`);
+  if (!res.ok) {
+    const errDetail = (data as any)?.error?.message || (data as any)?.error || `Execution layer error ${res.status}`;
+    throw new Error(errDetail);
+  }
   return data;
 }
 import {

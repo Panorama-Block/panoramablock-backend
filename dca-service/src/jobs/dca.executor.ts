@@ -7,6 +7,12 @@ import { DCAStrategy } from '../types';
 
 const EXECUTION_LAYER_URL = process.env.EXECUTION_LAYER_URL || 'http://localhost:3010';
 
+function toWei(amount: string, decimals: number): string {
+  const [intPart, fracPart = ''] = amount.split('.');
+  const fracPadded = fracPart.padEnd(decimals, '0').slice(0, decimals);
+  return (BigInt(intPart) * BigInt(10 ** decimals) + BigInt(fracPadded || '0')).toString();
+}
+
 /**
  * DCA Executor - Runs strategies on schedule
  * This job checks for pending DCA executions every minute.
@@ -159,35 +165,37 @@ export class DCAExecutor {
 
   // ── Lending ────────────────────────────────────────────────────────────
   private async executeLendingStrategy(strategy: DCAStrategy, sessionKey: string, userId: string): Promise<string> {
-    console.log(`[DCA Executor] 🏦 Executing lending strategy: ${strategy.lendingAction} ${strategy.amount} on ${strategy.protocol}`);
+    const action = strategy.lendingAction || 'supply';
+    const protocol = strategy.protocol || 'benqi';
+    console.log(`[DCA Executor] 🏦 Executing lending strategy: ${action} ${strategy.amount} on ${protocol}`);
 
-    return this.proxyToExecutionLayer('/dca/prepare-dca-lending', {
-      userAddress: strategy.smartAccountId,
-      qTokenAddress: strategy.fromToken,
-      amount: strategy.amount,
-      action: strategy.lendingAction || 'supply',
-    }, strategy, sessionKey);
+    if (protocol === 'benqi' || strategy.fromChainId === 43114) {
+      const path = action === 'borrow' ? '/avax/lending/prepare-borrow' : '/avax/lending/prepare-supply';
+      const amountWei = toWei(strategy.amount, 18);
+      return this.proxyToExecutionLayer(path, {
+        userAddress: strategy.smartAccountId.toLowerCase(),
+        qTokenAddress: strategy.fromToken.toLowerCase(),
+        amount: amountWei,
+      }, strategy, sessionKey);
+    }
+
+    throw new Error(`Lending protocol "${protocol}" on chain ${strategy.fromChainId} is not yet supported by the execution layer. Supported: Benqi (Avalanche).`);
   }
 
   // ── Liquid Staking ─────────────────────────────────────────────────────
   private async executeStakingStrategy(strategy: DCAStrategy, sessionKey: string, userId: string): Promise<string> {
     console.log(`[DCA Executor] 💧 Executing staking strategy: stake ${strategy.amount}`);
 
-    // Determine protocol from chain
-    let protocol: string;
     if (strategy.fromChainId === 43114) {
-      protocol = 'savax';
-    } else if (strategy.fromChainId === 1) {
-      protocol = 'lido';
-    } else {
-      throw new Error(`Liquid staking not yet supported on chain ${strategy.fromChainId}`);
+      // Avalanche: AVAX → sAVAX via Benqi
+      const amountWei = toWei(strategy.amount, 18);
+      return this.proxyToExecutionLayer('/avax/liquid-staking/prepare-stake', {
+        userAddress: strategy.smartAccountId.toLowerCase(),
+        amount: amountWei,
+      }, strategy, sessionKey);
     }
 
-    return this.proxyToExecutionLayer('/dca/prepare-dca-staking', {
-      userAddress: strategy.smartAccountId,
-      amount: strategy.amount,
-      protocol,
-    }, strategy, sessionKey);
+    throw new Error(`Liquid staking not yet supported on chain ${strategy.fromChainId}`);
   }
 
   // ── Liquidity Pool ─────────────────────────────────────────────────────
@@ -195,7 +203,7 @@ export class DCAExecutor {
     console.log(`[DCA Executor] 🔀 Executing LP strategy: add liquidity ${strategy.amount} + ${strategy.amountB}`);
 
     return this.proxyToExecutionLayer('/dca/prepare-dca-lp', {
-      userAddress: strategy.smartAccountId,
+      userAddress: strategy.smartAccountId.toLowerCase(),
       poolId: `${strategy.fromToken}-${strategy.toToken}`,
       amountA: strategy.amount,
       amountB: strategy.amountB || '0',
