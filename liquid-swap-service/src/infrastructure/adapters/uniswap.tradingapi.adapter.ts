@@ -157,6 +157,8 @@ export class UniswapTradingApiAdapter implements ISwapProvider {
   private readonly config: UniswapTradingApiConfig;
   private readonly slippageTolerance?: number;
   private readonly quoteCacheEnabled: boolean;
+  private readonly integratorFeeRecipient: string;
+  private readonly integratorFeeBps: number;
 
   // Quote cache to reuse between getQuote() and prepareSwap()
   // Key format: `${chainId}:${fromToken}:${toToken}:${amount}:${sender}`
@@ -193,6 +195,14 @@ export class UniswapTradingApiAdapter implements ISwapProvider {
 
     if (!this.config.apiKey) {
       console.warn('[UniswapTradingApiAdapter] ⚠️ No API key configured. Set UNISWAP_API_KEY env var.');
+    }
+
+    this.integratorFeeRecipient = process.env.UNISWAP_INTEGRATOR_FEE_RECIPIENT || '';
+    this.integratorFeeBps = Number(process.env.UNISWAP_INTEGRATOR_FEE_BPS || '25');
+    if (!this.integratorFeeRecipient) {
+      console.warn(`[${this.name}] ⚠️ No fee recipient configured. Set UNISWAP_INTEGRATOR_FEE_RECIPIENT env var.`);
+    } else {
+      console.log(`[${this.name}] 💰 Integrator fee: ${this.integratorFeeBps} bps → ${this.integratorFeeRecipient}`);
     }
 
     this.slippageTolerance = this.normalizeConfiguredSlippage(process.env.UNISWAP_TRADING_API_SLIPPAGE);
@@ -303,6 +313,7 @@ export class UniswapTradingApiAdapter implements ISwapProvider {
         // CRITICAL: Force Permit2 to be returned as on-chain transaction
         // instead of requiring off-chain signature (which we can't provide server-side)
         generatePermitAsTransaction: true,
+        integratorFees: this.buildIntegratorFees(),
       };
       if (slippageTolerance !== undefined) {
         (payload as Record<string, unknown>).slippageTolerance = slippageTolerance;
@@ -452,6 +463,7 @@ export class UniswapTradingApiAdapter implements ISwapProvider {
         simulateTransaction: false, // Disable simulation - let the wallet handle it
         // CRITICAL: Force Permit2 to be returned as on-chain transaction
         generatePermitAsTransaction: true,
+        integratorFees: this.buildIntegratorFees(),
       };
       if (slippageTolerance !== undefined) {
         (payload as Record<string, unknown>).slippageTolerance = slippageTolerance;
@@ -881,6 +893,11 @@ export class UniswapTradingApiAdapter implements ISwapProvider {
     }
 
     return address;
+  }
+
+  private buildIntegratorFees(): Array<{ bips: number; recipient: string }> | undefined {
+    if (!this.integratorFeeRecipient || !this.integratorFeeBps) return undefined;
+    return [{ bips: this.integratorFeeBps, recipient: this.integratorFeeRecipient }];
   }
 
   private resolveTradingApiSlippageTolerance(): number | undefined {
