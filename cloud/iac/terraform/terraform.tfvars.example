@@ -46,3 +46,30 @@ initial_key_vault_secrets = {
   jwt-secret          = "replace-me"
   thirdweb-secret-key = "replace-me"
 }
+
+# Public API migration from VM to Azure Container Apps.
+# Keep disabled until all referenced Key Vault secrets exist.
+public_api_container_apps_enabled = false
+container_registry_server         = "ghcr.io"
+container_registry_namespace      = "panorama-block"
+container_registry_username       = "example-user"
+public_api_image_tag              = "latest"
+
+public_api_managed_redis_enabled              = false
+public_api_managed_redis_sku_name             = "Balanced_B0"
+public_api_managed_redis_password_secret_name = "public-api-redis-pass"
+
+# Use overrides when existing Key Vault secret names differ from the Terraform
+# logical names used by the ACA module.
+public_api_key_vault_secret_name_overrides = {
+  rpc-url-avalanche = "avalanche-rpc-url"
+  rpc-url-fuji      = "fuji-rpc-url"
+}
+
+public_api_extra_plain_env = {
+  lending = {
+    VALIDATION_CONTRACT_ADDRESS = "0x0000000000000000000000000000000000000000"
+    TRADER_JOE_ROUTER           = "0x0000000000000000000000000000000000000000"
+    TRADER_JOE_FACTORY          = "0x0000000000000000000000000000000000000000"
+  }
+}
