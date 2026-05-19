@@ -221,6 +221,11 @@ jobs:
           VALIDATION_CONTRACT_ADDRESS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name validation-contract-address --query value -o tsv)
           LAYERSWAP_API_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name layerswap-api-key --query value -o tsv)
           LAYERSWAP_TON_VAULT=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name layerswap-ton-vault --query value -o tsv)
+          UNISWAP_ENABLED=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name uniswap-enabled --query value -o tsv)
+          UNISWAP_API_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name uniswap-api-key --query value -o tsv)
+          UNISWAP_API_URL=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name uniswap-api-url --query value -o tsv)
+          UNISWAP_INTEGRATOR_FEE_RECIPIENT=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name uniswap-integrator-fee-recipient --query value -o tsv)
+          UNISWAP_INTEGRATOR_FEE_BPS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name uniswap-integrator-fee-bps --query value -o tsv)
           PUBLIC_GATEWAY_URL=${PUBLIC_GATEWAY_URL}
           PUBLIC_WEBAPP_URL=${PUBLIC_WEBAPP_URL}
           WEBSITE_URL=${WEBSITE_URL}
