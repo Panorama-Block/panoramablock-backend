@@ -219,11 +219,162 @@ variable "telegram_gateway_vm_enabled" {
 variable "telegram_gateway_vm_size" {
   description = "VM size for the Telegram gateway VM."
   type        = string
-  default     = "Standard_B1ms"
+  default     = "Standard_D2as_v5"
 }
 
 variable "telegram_gateway_app_directory" {
   description = "Directory where the Telegram gateway deployment bundle will live on the VM."
   type        = string
   default     = "/opt/telegram-gateway"
+}
+
+variable "public_api_container_apps_enabled" {
+  description = "Create Azure Container Apps for public production API services."
+  type        = bool
+  default     = false
+}
+
+variable "container_apps_log_retention_days" {
+  description = "Log Analytics retention for Container Apps logs."
+  type        = number
+  default     = 30
+}
+
+variable "container_apps_workload_profile_name" {
+  description = "Container Apps workload profile name. Consumption keeps fixed cost low."
+  type        = string
+  default     = "Consumption"
+}
+
+variable "container_registry_server" {
+  description = "Container registry server for ACA images."
+  type        = string
+  default     = "ghcr.io"
+}
+
+variable "container_registry_namespace" {
+  description = "Container registry namespace or owner."
+  type        = string
+  default     = "panorama-block"
+}
+
+variable "container_registry_username" {
+  description = "Container registry username. Required when public_api_container_apps_enabled is true."
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
+variable "public_api_image_tag" {
+  description = "Image tag used by public API Container Apps."
+  type        = string
+  default     = "latest"
+}
+
+variable "public_api_key_vault_secret_name_overrides" {
+  description = "Optional mapping from Terraform logical secret names to existing Key Vault secret names."
+  type        = map(string)
+  default     = {}
+}
+
+variable "public_api_extra_plain_env" {
+  description = "Optional extra non-secret environment variables per public API service."
+  type        = map(map(string))
+  default     = {}
+}
+
+variable "bridge_avax_service_url" {
+  description = "Optional AVAX service URL consumed by bridge while AVAX is not part of this ACA migration."
+  type        = string
+  default     = ""
+}
+
+variable "public_api_redis_host" {
+  description = "Redis host exposed to public API Container Apps. This must be reachable from ACA."
+  type        = string
+  default     = "redis"
+}
+
+variable "public_api_redis_port" {
+  description = "Redis port exposed to public API Container Apps."
+  type        = string
+  default     = "6379"
+}
+
+variable "public_api_managed_redis_enabled" {
+  description = "Create Azure Managed Redis for public API Container Apps."
+  type        = bool
+  default     = false
+}
+
+variable "public_api_managed_redis_name" {
+  description = "Optional exact Azure Managed Redis name. Defaults to <project>-<environment>-public-api-redis."
+  type        = string
+  default     = null
+}
+
+variable "public_api_managed_redis_sku_name" {
+  description = "Azure Managed Redis SKU. Balanced_B0 matches the low-cost calculator estimate for 0.5 GiB."
+  type        = string
+  default     = "Balanced_B0"
+}
+
+variable "public_api_managed_redis_high_availability_enabled" {
+  description = "Enable two-node high availability for Azure Managed Redis."
+  type        = bool
+  default     = true
+}
+
+variable "public_api_managed_redis_database_name" {
+  description = "Azure Managed Redis database name."
+  type        = string
+  default     = "default"
+}
+
+variable "public_api_managed_redis_port" {
+  description = "Encrypted Azure Managed Redis database port. Azure Managed Redis uses 10000."
+  type        = number
+  default     = 10000
+}
+
+variable "public_api_managed_redis_eviction_policy" {
+  description = "Eviction policy for the Azure Managed Redis database."
+  type        = string
+  default     = "VolatileLRU"
+}
+
+variable "public_api_managed_redis_password_secret_name" {
+  description = "ACA-only Key Vault secret name that stores the Azure Managed Redis access key. Terraform references it but does not create or read its value."
+  type        = string
+  default     = "public-api-redis-pass"
+}
+
+variable "public_api_engine_url" {
+  description = "Thirdweb Engine URL exposed to public API Container Apps. This must be reachable from ACA."
+  type        = string
+  default     = ""
+}
+
+variable "public_api_engine_enabled" {
+  description = "Enable server-side Thirdweb Engine execution for public API Container Apps."
+  type        = bool
+  default     = false
+}
+
+variable "public_api_execution_layer_url" {
+  description = "Execution layer URL exposed to public API Container Apps. This must be reachable from ACA."
+  type        = string
+  default     = ""
+}
+
+variable "public_api_db_gateway_url" {
+  description = "Database gateway URL exposed to public API Container Apps. This must be reachable from ACA."
+  type        = string
+  default     = ""
+}
+
+variable "public_api_auth_service_url" {
+  description = "Optional auth URL fallback for services that need auth before Terraform knows the ACA auth URL."
+  type        = string
+  default     = ""
 }
