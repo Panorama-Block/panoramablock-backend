@@ -46,7 +46,7 @@ locals {
 
   public_api_managed_redis_name = coalesce(var.public_api_managed_redis_name, "${local.name_prefix}-public-api-redis")
 
-  public_api_redis_hostname = var.public_api_managed_redis_enabled ? "${local.public_api_managed_redis_name}.redis.cache.windows.net" : var.public_api_redis_host
+  public_api_redis_hostname = var.public_api_managed_redis_enabled ? azapi_resource.public_api_managed_redis[0].output.properties.hostName : var.public_api_redis_host
   public_api_redis_port     = var.public_api_managed_redis_enabled ? tostring(var.public_api_managed_redis_port) : var.public_api_redis_port
   public_api_redis_url      = "${var.public_api_managed_redis_enabled ? "rediss" : "redis"}://${local.public_api_redis_hostname}:${local.public_api_redis_port}"
 
