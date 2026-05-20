@@ -9,6 +9,12 @@ resource "azurerm_container_app" "this" {
   revision_mode                = "Single"
   tags                         = var.tags
 
+  lifecycle {
+    ignore_changes = [
+      template[0].container[0].image,
+    ]
+  }
+
   identity {
     type         = "UserAssigned"
     identity_ids = [var.user_assigned_identity_id]
