@@ -21,9 +21,8 @@ resource "azurerm_container_app" "this" {
   }
 
   registry {
-    server               = var.registry_server
-    username             = var.registry_username
-    password_secret_name = var.registry_password_secret_name
+    server   = var.registry_server
+    identity = var.registry_identity
   }
 
   dynamic "secret" {

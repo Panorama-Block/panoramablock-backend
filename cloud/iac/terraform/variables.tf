@@ -246,20 +246,31 @@ variable "container_apps_workload_profile_name" {
   default     = "Consumption"
 }
 
-variable "container_registry_server" {
-  description = "Container registry server for ACA images."
+variable "container_registry_name" {
+  description = "Azure Container Registry name for public API images. Must be globally unique, 5-50 lowercase alphanumeric characters."
   type        = string
-  default     = "ghcr.io"
+  default     = "panoramadevpublicapi"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]{5,50}$", var.container_registry_name))
+    error_message = "container_registry_name must be 5-50 lowercase alphanumeric characters."
+  }
+}
+
+variable "container_registry_server" {
+  description = "Deprecated. Public API Container Apps now use the Terraform-managed ACR login server."
+  type        = string
+  default     = null
 }
 
 variable "container_registry_namespace" {
-  description = "Container registry namespace or owner."
+  description = "Deprecated. Public API Container Apps now push service images directly to ACR repositories."
   type        = string
-  default     = "panorama-block"
+  default     = null
 }
 
 variable "container_registry_username" {
-  description = "Container registry username. Required when public_api_container_apps_enabled is true."
+  description = "Deprecated. Public API Container Apps now use managed identity for registry pulls."
   type        = string
   default     = null
   sensitive   = true
