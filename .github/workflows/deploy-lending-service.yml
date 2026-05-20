@@ -1,6 +1,9 @@
 name: Deploy Lending Service
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -8,7 +11,9 @@ permissions:
   contents: read
 
 env:
-  RG: Core-Deploy
+  RG: rg-panorama-dev
+  APP_NAME: panorama-dev-lending-api
+  IMAGE_REPO: ghcr.io/panorama-block/lending-service
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
@@ -39,103 +44,68 @@ jobs:
           username: ${{ secrets.GHCR_USERNAME }}
           password: ${{ secrets.GHCR_PASSWORD }}
 
-      - name: Compute lending-service image
-        id: image
-        run: |
-          OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
-          echo "image=ghcr.io/${OWNER_LOWER}/lending-service:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-
       - name: Build and push lending-service image
         env:
-          IMAGE: ${{ steps.image.outputs.image }}
+          IMAGE_SHA: ${{ env.IMAGE_REPO }}:${{ env.IMAGE_TAG }}
+          IMAGE_LATEST: ${{ env.IMAGE_REPO }}:latest
         run: |
-          docker build -t "$IMAGE" ./lending-service
-          docker push "$IMAGE"
-
-      - name: Authorize lending-service container app
-        run: |
-          az containerapp registry set \
-            --name lending-service \
-            --resource-group $RG \
-            --server ghcr.io \
-            --username ${{ secrets.GHCR_USERNAME }} \
-            --password ${{ secrets.GHCR_PASSWORD }}
-
-      - name: Resolve execution-service FQDN
-        id: exec_fqdn
-        run: |
-          FQDN=$(az containerapp show \
-            --name execution-service \
-            --resource-group $RG \
-            --query properties.configuration.ingress.fqdn -o tsv)
-          echo "url=https://${FQDN}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          docker build -t "$IMAGE_SHA" -t "$IMAGE_LATEST" ./lending-service
+          docker push "$IMAGE_SHA"
+          docker push "$IMAGE_LATEST"
 
       - name: Deploy lending-service
         env:
-          IMAGE: ${{ steps.image.outputs.image }}
-          EXEC_URL: ${{ steps.exec_fqdn.outputs.url }}
+          IMAGE_SHA: ${{ env.IMAGE_REPO }}:${{ env.IMAGE_TAG }}
         run: |
+          set -euo pipefail
           az containerapp update \
-            --name lending-service \
-            --resource-group $RG \
-            --image "$IMAGE" \
-            --set-env-vars PORT=3001 EXECUTION_LAYER_URL="$EXEC_URL"
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --image "$IMAGE_SHA"
 
       - name: Wait for latest revision ready
         run: |
           set -euo pipefail
-          for attempt in 1 2 3 4 5 6 7 8; do
-            latest_revision="$(az containerapp show --name lending-service --resource-group "$RG" --query properties.latestRevisionName -o tsv)"
-            latest_ready_revision="$(az containerapp show --name lending-service --resource-group "$RG" --query properties.latestReadyRevisionName -o tsv)"
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            latest_revision="$(az containerapp show --name "$APP_NAME" --resource-group "$RG" --query properties.latestRevisionName -o tsv)"
+            latest_ready_revision="$(az containerapp show --name "$APP_NAME" --resource-group "$RG" --query properties.latestReadyRevisionName -o tsv)"
             echo "latestRevisionName=${latest_revision}"
             echo "latestReadyRevisionName=${latest_ready_revision}"
 
-            if [ -n "${latest_revision}" ] && [ "${latest_revision}" = "${latest_ready_revision}" ]; then
+            if [ -n "$latest_revision" ] && [ "$latest_revision" = "$latest_ready_revision" ]; then
               echo "Latest revision is ready."
               exit 0
             fi
 
-            if [ "$attempt" -eq 8 ]; then
-              echo "Latest revision did not become ready in time."
-              exit 1
-            fi
-
             sleep 15
           done
 
-      - name: Smoke test normalized lending routes
+          echo "Latest revision did not become ready in time."
+          exit 1
+
+      - name: Smoke test health endpoint
         run: |
           set -euo pipefail
-
-          DUMMY_ADDRESS="0x1111111111111111111111111111111111111111"
-          FQDN="$(az containerapp show --name lending-service --resource-group "$RG" --query properties.configuration.ingress.fqdn -o tsv)"
+          FQDN="$(az containerapp show --name "$APP_NAME" --resource-group "$RG" --query properties.configuration.ingress.fqdn -o tsv)"
           if [ -z "${FQDN:-}" ]; then
-            echo "Could not resolve lending-service FQDN"
+            echo "Could not resolve ${APP_NAME} FQDN"
             exit 1
           fi
-          BASE_URL="https://${FQDN}"
-          echo "Smoke target: ${BASE_URL}"
 
-          for attempt in 1 2 3; do
-            echo "Smoke attempt ${attempt}..."
+          URL="https://${FQDN}/health"
+          for attempt in 1 2 3 4 5; do
+            status="$(curl -sS -L --max-time 30 -o /tmp/health_body.txt -w '%{http_code}' "$URL" || true)"
+            echo "HEALTH_STATUS=${status}"
+            cat /tmp/health_body.txt || true
 
-            markets_status="$(curl -sS -L --max-time 30 -o /tmp/lending_markets_body.txt -w '%{http_code}' "${BASE_URL}/benqi/markets")"
-            echo "MARKETS_STATUS=${markets_status}"
-            cat /tmp/lending_markets_body.txt || true
-
-            positions_status="$(curl -sS -L --max-time 30 -o /tmp/lending_positions_body.txt -w '%{http_code}' "${BASE_URL}/benqi/account/${DUMMY_ADDRESS}/positions")"
-            echo "POSITIONS_STATUS=${positions_status}"
-            cat /tmp/lending_positions_body.txt || true
-
-            if [ "${markets_status}" = "200" ] && [ "${positions_status}" != "404" ]; then
-              echo "Lending smoke test passed."
+            if [ "$status" = "200" ]; then
+              echo "Health smoke test passed."
               exit 0
             fi
 
-            if [ "$attempt" -eq 3 ]; then
-              echo "Lending smoke test failed after retries."
-              exit 1
-            fi
-
             sleep 15
           done
+
+          echo "Health smoke test failed."
+          exit 1

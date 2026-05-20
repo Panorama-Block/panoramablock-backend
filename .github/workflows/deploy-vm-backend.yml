@@ -1,4 +1,4 @@
-name: Deploy Heavy Backend To Azure VM
+name: Legacy VM - Deploy Internal Backend VM
 
 on:
   workflow_dispatch:

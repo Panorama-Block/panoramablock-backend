@@ -1,6 +1,9 @@
 name: Deploy Auth Service
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -8,7 +11,9 @@ permissions:
   contents: read
 
 env:
-  RG: Core-Deploy
+  RG: rg-panorama-dev
+  APP_NAME: panorama-dev-auth-api
+  IMAGE_REPO: ghcr.io/panorama-block/auth-service
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
@@ -39,35 +44,68 @@ jobs:
           username: ${{ secrets.GHCR_USERNAME }}
           password: ${{ secrets.GHCR_PASSWORD }}
 
-      - name: Compute auth image
-        id: image
-        run: |
-          OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
-          echo "image=ghcr.io/${OWNER_LOWER}/auth-service:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-
       - name: Build and push auth-service image
         env:
-          IMAGE: ${{ steps.image.outputs.image }}
+          IMAGE_SHA: ${{ env.IMAGE_REPO }}:${{ env.IMAGE_TAG }}
+          IMAGE_LATEST: ${{ env.IMAGE_REPO }}:latest
         run: |
-          docker build -t "$IMAGE" ./auth-service
-          docker push "$IMAGE"
-
-      - name: Authorize container app to pull from GHCR
-        env:
-          IMAGE: ${{ steps.image.outputs.image }}
-        run: |
-          az containerapp registry set \
-            --name auth-service \
-            --resource-group $RG \
-            --server ghcr.io \
-            --username ${{ secrets.GHCR_USERNAME }} \
-            --password ${{ secrets.GHCR_PASSWORD }}
+          set -euo pipefail
+          docker build -t "$IMAGE_SHA" -t "$IMAGE_LATEST" ./auth-service
+          docker push "$IMAGE_SHA"
+          docker push "$IMAGE_LATEST"
 
       - name: Deploy auth-service
         env:
-          IMAGE: ${{ steps.image.outputs.image }}
+          IMAGE_SHA: ${{ env.IMAGE_REPO }}:${{ env.IMAGE_TAG }}
         run: |
+          set -euo pipefail
           az containerapp update \
-            --name auth-service \
-            --resource-group $RG \
-            --image "$IMAGE"
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --image "$IMAGE_SHA"
+
+      - name: Wait for latest revision ready
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            latest_revision="$(az containerapp show --name "$APP_NAME" --resource-group "$RG" --query properties.latestRevisionName -o tsv)"
+            latest_ready_revision="$(az containerapp show --name "$APP_NAME" --resource-group "$RG" --query properties.latestReadyRevisionName -o tsv)"
+            echo "latestRevisionName=${latest_revision}"
+            echo "latestReadyRevisionName=${latest_ready_revision}"
+
+            if [ -n "$latest_revision" ] && [ "$latest_revision" = "$latest_ready_revision" ]; then
+              echo "Latest revision is ready."
+              exit 0
+            fi
+
+            sleep 15
+          done
+
+          echo "Latest revision did not become ready in time."
+          exit 1
+
+      - name: Smoke test health endpoint
+        run: |
+          set -euo pipefail
+          FQDN="$(az containerapp show --name "$APP_NAME" --resource-group "$RG" --query properties.configuration.ingress.fqdn -o tsv)"
+          if [ -z "${FQDN:-}" ]; then
+            echo "Could not resolve ${APP_NAME} FQDN"
+            exit 1
+          fi
+
+          URL="https://${FQDN}/health"
+          for attempt in 1 2 3 4 5; do
+            status="$(curl -sS -L --max-time 30 -o /tmp/health_body.txt -w '%{http_code}' "$URL" || true)"
+            echo "HEALTH_STATUS=${status}"
+            cat /tmp/health_body.txt || true
+
+            if [ "$status" = "200" ]; then
+              echo "Health smoke test passed."
+              exit 0
+            fi
+
+            sleep 15
+          done
+
+          echo "Health smoke test failed."
+          exit 1

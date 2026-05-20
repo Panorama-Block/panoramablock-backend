@@ -1,4 +1,4 @@
-name: Deploy Public API VM
+name: Legacy VM - Deploy Public API VM
 
 on:
   workflow_dispatch:
