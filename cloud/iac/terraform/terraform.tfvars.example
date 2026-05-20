@@ -39,8 +39,6 @@ deployment_principal_object_id = "00000000-0000-0000-0000-000000000000"
 
 initial_key_vault_secrets = {
   app-domain          = "api.example.com"
-  ghcr-username       = "example-user"
-  ghcr-password       = "ghp_xxx"
   postgres-app-user   = "panorama_app"
   postgres-app-pass   = "replace-me"
   jwt-secret          = "replace-me"
@@ -50,9 +48,7 @@ initial_key_vault_secrets = {
 # Public API migration from VM to Azure Container Apps.
 # Keep disabled until all referenced Key Vault secrets exist.
 public_api_container_apps_enabled = false
-container_registry_server         = "ghcr.io"
-container_registry_namespace      = "panorama-block"
-container_registry_username       = "example-user"
+container_registry_name           = "panoramadevpublicapi"
 public_api_image_tag              = "latest"
 
 public_api_managed_redis_enabled              = false

@@ -50,16 +50,9 @@ variable "registry_server" {
   type        = string
 }
 
-variable "registry_username" {
-  description = "Container registry username."
+variable "registry_identity" {
+  description = "User-assigned managed identity resource ID used to pull from the container registry."
   type        = string
-  sensitive   = true
-}
-
-variable "registry_password_secret_name" {
-  description = "Name of the Container Apps secret containing the registry password."
-  type        = string
-  default     = "ghcr-password"
 }
 
 variable "plain_env" {

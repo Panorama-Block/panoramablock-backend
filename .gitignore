@@ -45,6 +45,7 @@ liquid-swap-service/shared/token-registry.json
 *.tfvars.json
 *.tfplan
 tfplan
+tfplan-*
 .terraform.tfstate.lock.info
 crash.log
 override.tf
