@@ -55,7 +55,6 @@ locals {
   public_api_redis_key_vault_secret_versionless_id = "${trimsuffix(module.keyvault.vault_uri, "/")}/secrets/${local.public_api_redis_key_vault_secret_name}"
 
   public_api_base_required_secret_names = [
-    "ghcr-password",
     "auth-private-key",
     "app-domain",
     "thirdweb-client-id",
@@ -429,6 +428,35 @@ resource "azurerm_user_assigned_identity" "container_apps" {
   )
 }
 
+resource "azurerm_container_registry" "public_api" {
+  count               = var.public_api_container_apps_enabled ? 1 : 0
+  name                = var.container_registry_name
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  sku                 = "Basic"
+  admin_enabled       = false
+  tags = merge(
+    local.common_tags,
+    {
+      workload = "public-api-container-apps"
+    }
+  )
+}
+
+resource "azurerm_role_assignment" "public_api_acr_pull" {
+  count                = var.public_api_container_apps_enabled ? 1 : 0
+  scope                = azurerm_container_registry.public_api[0].id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_user_assigned_identity.container_apps[0].principal_id
+}
+
+resource "azurerm_role_assignment" "deployment_principal_acr_push" {
+  count                = var.public_api_container_apps_enabled && var.deployment_principal_object_id != null ? 1 : 0
+  scope                = azurerm_container_registry.public_api[0].id
+  role_definition_name = "AcrPush"
+  principal_id         = var.deployment_principal_object_id
+}
+
 resource "azurerm_key_vault_access_policy" "container_apps" {
   count        = var.public_api_container_apps_enabled ? 1 : 0
   key_vault_id = module.keyvault.key_vault_id
@@ -516,24 +544,23 @@ module "public_api_auth" {
   location                     = azurerm_resource_group.main.location
   container_app_environment_id = azurerm_container_app_environment.public_api[0].id
   user_assigned_identity_id    = azurerm_user_assigned_identity.container_apps[0].id
-  image                        = "${var.container_registry_server}/${var.container_registry_namespace}/${local.public_api_services.auth.image_name}:${var.public_api_image_tag}"
+  image                        = "${azurerm_container_registry.public_api[0].login_server}/${local.public_api_services.auth.image_name}:${var.public_api_image_tag}"
   target_port                  = local.public_api_services.auth.port
   ingress_external_enabled     = true
-  registry_server              = var.container_registry_server
-  registry_username            = var.container_registry_username
+  registry_server              = azurerm_container_registry.public_api[0].login_server
+  registry_identity            = azurerm_user_assigned_identity.container_apps[0].id
   plain_env = merge(
     local.public_api_services.auth.plain_env,
     lookup(var.public_api_extra_plain_env, "auth", {})
   )
-  secret_env                    = local.public_api_services.auth.secret_env
-  secrets                       = local.public_api_secret_refs_with_managed_redis
-  cpu                           = 0.5
-  memory                        = "1Gi"
-  min_replicas                  = 1
-  max_replicas                  = local.public_api_services.auth.max
-  concurrent_requests           = 60
-  health_path                   = "/health"
-  registry_password_secret_name = "ghcr-password"
+  secret_env          = local.public_api_services.auth.secret_env
+  secrets             = local.public_api_secret_refs_with_managed_redis
+  cpu                 = 0.5
+  memory              = "1Gi"
+  min_replicas        = 1
+  max_replicas        = local.public_api_services.auth.max
+  concurrent_requests = 60
+  health_path         = "/health"
   tags = merge(
     local.common_tags,
     {
@@ -543,7 +570,8 @@ module "public_api_auth" {
   )
 
   depends_on = [
-    azurerm_key_vault_access_policy.container_apps
+    azurerm_key_vault_access_policy.container_apps,
+    azurerm_role_assignment.public_api_acr_pull
   ]
 }
 
@@ -556,11 +584,11 @@ module "public_api_liquid_swap" {
   location                     = azurerm_resource_group.main.location
   container_app_environment_id = azurerm_container_app_environment.public_api[0].id
   user_assigned_identity_id    = azurerm_user_assigned_identity.container_apps[0].id
-  image                        = "${var.container_registry_server}/${var.container_registry_namespace}/${local.public_api_services.liquid_swap.image_name}:${var.public_api_image_tag}"
+  image                        = "${azurerm_container_registry.public_api[0].login_server}/${local.public_api_services.liquid_swap.image_name}:${var.public_api_image_tag}"
   target_port                  = local.public_api_services.liquid_swap.port
   ingress_external_enabled     = true
-  registry_server              = var.container_registry_server
-  registry_username            = var.container_registry_username
+  registry_server              = azurerm_container_registry.public_api[0].login_server
+  registry_identity            = azurerm_user_assigned_identity.container_apps[0].id
   plain_env = merge(
     local.public_api_services.liquid_swap.plain_env,
     lookup(var.public_api_extra_plain_env, "liquid_swap", {}),
@@ -568,15 +596,14 @@ module "public_api_liquid_swap" {
       AUTH_SERVICE_URL = try(module.public_api_auth[0].url, "")
     }
   )
-  secret_env                    = local.public_api_services.liquid_swap.secret_env
-  secrets                       = local.public_api_secret_refs_with_managed_redis
-  cpu                           = 0.5
-  memory                        = "1Gi"
-  min_replicas                  = 1
-  max_replicas                  = local.public_api_services.liquid_swap.max
-  concurrent_requests           = 60
-  health_path                   = "/health"
-  registry_password_secret_name = "ghcr-password"
+  secret_env          = local.public_api_services.liquid_swap.secret_env
+  secrets             = local.public_api_secret_refs_with_managed_redis
+  cpu                 = 0.5
+  memory              = "1Gi"
+  min_replicas        = 1
+  max_replicas        = local.public_api_services.liquid_swap.max
+  concurrent_requests = 60
+  health_path         = "/health"
   tags = merge(
     local.common_tags,
     {
@@ -586,7 +613,8 @@ module "public_api_liquid_swap" {
   )
 
   depends_on = [
-    azurerm_key_vault_access_policy.container_apps
+    azurerm_key_vault_access_policy.container_apps,
+    azurerm_role_assignment.public_api_acr_pull
   ]
 }
 
@@ -599,24 +627,23 @@ module "public_api_lido" {
   location                     = azurerm_resource_group.main.location
   container_app_environment_id = azurerm_container_app_environment.public_api[0].id
   user_assigned_identity_id    = azurerm_user_assigned_identity.container_apps[0].id
-  image                        = "${var.container_registry_server}/${var.container_registry_namespace}/${local.public_api_services.lido.image_name}:${var.public_api_image_tag}"
+  image                        = "${azurerm_container_registry.public_api[0].login_server}/${local.public_api_services.lido.image_name}:${var.public_api_image_tag}"
   target_port                  = local.public_api_services.lido.port
   ingress_external_enabled     = true
-  registry_server              = var.container_registry_server
-  registry_username            = var.container_registry_username
+  registry_server              = azurerm_container_registry.public_api[0].login_server
+  registry_identity            = azurerm_user_assigned_identity.container_apps[0].id
   plain_env = merge(
     local.public_api_services.lido.plain_env,
     lookup(var.public_api_extra_plain_env, "lido", {})
   )
-  secret_env                    = local.public_api_services.lido.secret_env
-  secrets                       = local.public_api_secret_refs_with_managed_redis
-  cpu                           = 0.5
-  memory                        = "1Gi"
-  min_replicas                  = 1
-  max_replicas                  = local.public_api_services.lido.max
-  concurrent_requests           = 60
-  health_path                   = "/health"
-  registry_password_secret_name = "ghcr-password"
+  secret_env          = local.public_api_services.lido.secret_env
+  secrets             = local.public_api_secret_refs_with_managed_redis
+  cpu                 = 0.5
+  memory              = "1Gi"
+  min_replicas        = 1
+  max_replicas        = local.public_api_services.lido.max
+  concurrent_requests = 60
+  health_path         = "/health"
   tags = merge(
     local.common_tags,
     {
@@ -626,7 +653,8 @@ module "public_api_lido" {
   )
 
   depends_on = [
-    azurerm_key_vault_access_policy.container_apps
+    azurerm_key_vault_access_policy.container_apps,
+    azurerm_role_assignment.public_api_acr_pull
   ]
 }
 
@@ -639,11 +667,11 @@ module "public_api_lending" {
   location                     = azurerm_resource_group.main.location
   container_app_environment_id = azurerm_container_app_environment.public_api[0].id
   user_assigned_identity_id    = azurerm_user_assigned_identity.container_apps[0].id
-  image                        = "${var.container_registry_server}/${var.container_registry_namespace}/${local.public_api_services.lending.image_name}:${var.public_api_image_tag}"
+  image                        = "${azurerm_container_registry.public_api[0].login_server}/${local.public_api_services.lending.image_name}:${var.public_api_image_tag}"
   target_port                  = local.public_api_services.lending.port
   ingress_external_enabled     = true
-  registry_server              = var.container_registry_server
-  registry_username            = var.container_registry_username
+  registry_server              = azurerm_container_registry.public_api[0].login_server
+  registry_identity            = azurerm_user_assigned_identity.container_apps[0].id
   plain_env = merge(
     local.public_api_services.lending.plain_env,
     lookup(var.public_api_extra_plain_env, "lending", {}),
@@ -651,15 +679,14 @@ module "public_api_lending" {
       AUTH_SERVICE_URL = try(module.public_api_auth[0].url, var.public_api_auth_service_url)
     }
   )
-  secret_env                    = local.public_api_services.lending.secret_env
-  secrets                       = local.public_api_secret_refs_with_managed_redis
-  cpu                           = 0.5
-  memory                        = "1Gi"
-  min_replicas                  = 1
-  max_replicas                  = local.public_api_services.lending.max
-  concurrent_requests           = 60
-  health_path                   = "/health"
-  registry_password_secret_name = "ghcr-password"
+  secret_env          = local.public_api_services.lending.secret_env
+  secrets             = local.public_api_secret_refs_with_managed_redis
+  cpu                 = 0.5
+  memory              = "1Gi"
+  min_replicas        = 1
+  max_replicas        = local.public_api_services.lending.max
+  concurrent_requests = 60
+  health_path         = "/health"
   tags = merge(
     local.common_tags,
     {
@@ -669,7 +696,8 @@ module "public_api_lending" {
   )
 
   depends_on = [
-    azurerm_key_vault_access_policy.container_apps
+    azurerm_key_vault_access_policy.container_apps,
+    azurerm_role_assignment.public_api_acr_pull
   ]
 }
 
@@ -682,11 +710,11 @@ module "public_api_bridge" {
   location                     = azurerm_resource_group.main.location
   container_app_environment_id = azurerm_container_app_environment.public_api[0].id
   user_assigned_identity_id    = azurerm_user_assigned_identity.container_apps[0].id
-  image                        = "${var.container_registry_server}/${var.container_registry_namespace}/${local.public_api_services.bridge.image_name}:${var.public_api_image_tag}"
+  image                        = "${azurerm_container_registry.public_api[0].login_server}/${local.public_api_services.bridge.image_name}:${var.public_api_image_tag}"
   target_port                  = local.public_api_services.bridge.port
   ingress_external_enabled     = true
-  registry_server              = var.container_registry_server
-  registry_username            = var.container_registry_username
+  registry_server              = azurerm_container_registry.public_api[0].login_server
+  registry_identity            = azurerm_user_assigned_identity.container_apps[0].id
   plain_env = merge(
     local.public_api_services.bridge.plain_env,
     lookup(var.public_api_extra_plain_env, "bridge", {}),
@@ -697,15 +725,14 @@ module "public_api_bridge" {
       LENDING_SERVICE_URL     = try(module.public_api_lending[0].url, "")
     }
   )
-  secret_env                    = local.public_api_services.bridge.secret_env
-  secrets                       = local.public_api_secret_refs_with_managed_redis
-  cpu                           = 0.5
-  memory                        = "1Gi"
-  min_replicas                  = 1
-  max_replicas                  = local.public_api_services.bridge.max
-  concurrent_requests           = 60
-  health_path                   = "/health"
-  registry_password_secret_name = "ghcr-password"
+  secret_env          = local.public_api_services.bridge.secret_env
+  secrets             = local.public_api_secret_refs_with_managed_redis
+  cpu                 = 0.5
+  memory              = "1Gi"
+  min_replicas        = 1
+  max_replicas        = local.public_api_services.bridge.max
+  concurrent_requests = 60
+  health_path         = "/health"
   tags = merge(
     local.common_tags,
     {
@@ -715,6 +742,7 @@ module "public_api_bridge" {
   )
 
   depends_on = [
-    azurerm_key_vault_access_policy.container_apps
+    azurerm_key_vault_access_policy.container_apps,
+    azurerm_role_assignment.public_api_acr_pull
   ]
 }

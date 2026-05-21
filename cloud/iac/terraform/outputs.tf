@@ -54,6 +54,14 @@ output "container_apps_log_analytics_workspace_id" {
   value = try(azurerm_log_analytics_workspace.container_apps[0].id, null)
 }
 
+output "public_api_container_registry_name" {
+  value = try(azurerm_container_registry.public_api[0].name, null)
+}
+
+output "public_api_container_registry_login_server" {
+  value = try(azurerm_container_registry.public_api[0].login_server, null)
+}
+
 output "public_api_managed_redis_name" {
   value = try(azapi_resource.public_api_managed_redis[0].name, null)
 }
