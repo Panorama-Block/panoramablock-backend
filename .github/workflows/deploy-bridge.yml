@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "bridge-service/**"
+      - "shared/token-registry.json"
+      - ".github/workflows/deploy-bridge.yml"
   workflow_dispatch:
 
 permissions:
@@ -46,7 +50,9 @@ jobs:
           IMAGE_LATEST: ${{ env.IMAGE_REPO }}:latest
         run: |
           set -euo pipefail
-          docker build -t "$IMAGE_SHA" -t "$IMAGE_LATEST" ./bridge-service
+          mkdir -p bridge-service/shared
+          cp shared/token-registry.json bridge-service/shared/token-registry.json
+          docker build --target production -t "$IMAGE_SHA" -t "$IMAGE_LATEST" ./bridge-service
           docker push "$IMAGE_SHA"
           docker push "$IMAGE_LATEST"
 

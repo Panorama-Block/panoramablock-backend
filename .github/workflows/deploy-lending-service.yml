@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "lending-service/**"
+      - ".github/workflows/deploy-lending-service.yml"
   workflow_dispatch:
 
 permissions:
