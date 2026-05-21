@@ -58,7 +58,10 @@ resource "azurerm_container_app" "this" {
       memory = var.memory
 
       dynamic "env" {
-        for_each = var.plain_env
+        for_each = {
+          for name, value in var.plain_env : name => value
+          if value != ""
+        }
 
         content {
           name  = env.key

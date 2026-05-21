@@ -35,6 +35,7 @@ WORKDIR /app
 COPY --from=builder --chown=tacservice:nodejs /app/dist ./dist
 COPY --from=builder --chown=tacservice:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=tacservice:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=tacservice:nodejs /app/shared ./shared
 
 # Create logs directory
 RUN mkdir -p /app/logs && chown -R tacservice:nodejs /app/logs
