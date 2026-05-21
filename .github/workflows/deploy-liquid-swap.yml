@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "liquid-swap-service/**"
+      - "shared/token-registry.json"
+      - ".github/workflows/deploy-liquid-swap.yml"
   workflow_dispatch:
 
 permissions:
