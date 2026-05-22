@@ -1,13 +1,20 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { LidoRoutes } from './infrastructure/http/routes/lidoRoutes';
+import { buildStakingRouter } from './infrastructure/http/routes/staking.routes';
+import { buildStakingContainer, type StakingContainer } from './infrastructure/di/container';
 import { ErrorHandler } from './infrastructure/http/middleware/errorHandler';
 import { DatabaseService } from './infrastructure/database/database.service';
 import { EthereumConfig } from './infrastructure/config/ethereum';
 import { ERROR_CODES, sendError } from './shared/errorCodes';
 import { serializeByUser } from './middleware/serialize-by-user';
 
-export function createApp(): express.Express {
+export interface CreateAppOptions {
+  /** Inject a pre-built staking container — test convenience. Production builds default. */
+  stakingContainer?: StakingContainer;
+}
+
+export function createApp(options: CreateAppOptions = {}): express.Express {
   const app = express();
 
   app.use(cors());
@@ -58,7 +65,24 @@ export function createApp(): express.Express {
 
   app.use(serializeByUser);
 
-  app.use('/api/lido', LidoRoutes);
+  // Deprecated namespace — kept working for one release with a Deprecation header.
+  app.use(
+    '/api/lido',
+    (_req, res, next) => {
+      res.setHeader('Deprecation', 'true');
+      res.setHeader('Link', '</v1/capability/staking>; rel="successor-version"');
+      next();
+    },
+    LidoRoutes,
+  );
+
+  // Capability namespace — see SPRINT_HUGO.md card #246 and ADR 002 (capability + provider).
+  const stakingContainer = options.stakingContainer ?? buildStakingContainer();
+  stakingContainer.start();
+  app.use('/v1/capability/staking', buildStakingRouter({
+    facade: stakingContainer.facade,
+    discoveryHandler: stakingContainer.discoveryHandler,
+  }));
 
   app.get('/health', async (_req, res) => {
     let dbOk = false;
