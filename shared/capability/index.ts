@@ -48,3 +48,67 @@ export type {
 } from "./availability.types";
 
 export { buildAvailabilityMap } from "./availability.types";
+
+// Registry: generic container that holds providers per capability.
+export { ProviderRegistry } from "./registry";
+export type {
+  RegistryListFilter,
+  RegistryEvent,
+  RegistryListener,
+  ListByChainOptions,
+  HealthOracle,
+} from "./registry.types";
+
+// Registry config loader: instantiate providers from a JSON config + a factory.
+export {
+  loadProvidersFromConfig,
+  type ProviderConfigEntry,
+  type ProviderConfigFile,
+  type ProviderFactory,
+  type LoaderOptions,
+  type LoaderResult,
+} from "./registry.loader";
+
+// Priority policy + the iterate/fallback helper used by every capability facade.
+export {
+  ChainAssetPriorityPolicy,
+  fallbackInvoke,
+  type IPriorityPolicy,
+  type PolicyContext,
+  type ChainAssetPriorityConfig,
+  type ChainPriorityEntry,
+  type PerChainAssetMap,
+  type PerChainList,
+  type FallbackInvokeInput,
+  type FallbackInvokeOutcome,
+  type FallbackInvokeSuccess,
+  type FallbackInvokeFailure,
+  type FallbackAttempt,
+} from "./policy";
+
+// Provider limitations + applyLimitations check.
+export {
+  applyLimitations,
+  compareDecimalStrings,
+  type ProviderLimitations,
+  type LimitationCheckInput,
+  type LimitationResult,
+} from "./provider-limitations";
+
+// Health tracker: periodic probes + HealthOracle implementation.
+export {
+  ProviderHealthTracker,
+  type ProviderHealthTrackerOptions,
+  type ProviderHealthReport,
+  type HealthScheduler,
+  type HealthSchedulerHandle,
+} from "./health";
+
+// Discovery handler factory — framework-agnostic.
+export {
+  createDiscoveryHandler,
+  type DiscoveryHandler,
+  type DiscoveryHandlerDeps,
+  type DiscoveryHandlerInput,
+  type DiscoveryHandlerOutput,
+} from "./http/discovery.handler";
