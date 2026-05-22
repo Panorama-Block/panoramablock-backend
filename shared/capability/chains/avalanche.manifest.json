@@ -1,0 +1,16 @@
+{
+  "id": 43114,
+  "slug": "avalanche",
+  "name": "Avalanche",
+  "nativeAsset": {
+    "symbol": "AVAX",
+    "decimals": 18
+  },
+  "rpcDefaults": [
+    "https://api.avax.network/ext/bc/C/rpc",
+    "https://avalanche.publicnode.com",
+    "https://avalanche-c-chain-rpc.publicnode.com"
+  ],
+  "blockExplorerUrl": "https://snowtrace.io",
+  "capabilitiesSupported": ["swap", "lending", "liquidity", "staking"]
+}
