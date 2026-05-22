@@ -1,0 +1,16 @@
+{
+  "id": 1,
+  "slug": "ethereum",
+  "name": "Ethereum",
+  "nativeAsset": {
+    "symbol": "ETH",
+    "decimals": 18
+  },
+  "rpcDefaults": [
+    "https://ethereum-rpc.publicnode.com",
+    "https://eth.llamarpc.com",
+    "https://rpc.ankr.com/eth"
+  ],
+  "blockExplorerUrl": "https://etherscan.io",
+  "capabilitiesSupported": ["swap", "staking"]
+}

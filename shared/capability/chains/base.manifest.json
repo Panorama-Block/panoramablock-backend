@@ -1,0 +1,16 @@
+{
+  "id": 8453,
+  "slug": "base",
+  "name": "Base",
+  "nativeAsset": {
+    "symbol": "ETH",
+    "decimals": 18
+  },
+  "rpcDefaults": [
+    "https://mainnet.base.org",
+    "https://base.publicnode.com",
+    "https://base-rpc.publicnode.com"
+  ],
+  "blockExplorerUrl": "https://basescan.org",
+  "capabilitiesSupported": ["swap", "lending", "liquidity"]
+}

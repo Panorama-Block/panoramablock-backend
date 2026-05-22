@@ -112,3 +112,16 @@ export {
   type DiscoveryHandlerInput,
   type DiscoveryHandlerOutput,
 } from "./http/discovery.handler";
+
+// Chain manifests — single source of truth for supported chains.
+export {
+  loadChains,
+  getChain,
+  tryGetChain,
+  listChains,
+  listKnownChains,
+  validateChainManifest,
+  type ChainManifest,
+  type ChainNativeAsset,
+  type LoadChainsOptions,
+} from "./chains";
