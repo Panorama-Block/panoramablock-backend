@@ -5,16 +5,16 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "start": "node -r tsconfig-paths/register dist/index.js",
+    "dev": "ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/index.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@thirdweb-dev/engine": "^3.2.1",
-    "chai": "^4.3.10",
     "axios": "^1.12.2",
+    "chai": "^4.3.10",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "ethers": "^5.7.2",
@@ -33,6 +33,7 @@
     "jest": "^30.2.0",
     "ts-jest": "^29.4.5",
     "ts-node-dev": "^2.0.0",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.2.2"
   },
   "overrides": {
