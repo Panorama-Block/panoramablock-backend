@@ -7,11 +7,21 @@
  * providers without special-case branching.
  */
 
+import type { ProviderMetadata } from '@panorama/capability';
 import { SwapQuote, SwapRequest, TransactionStatus } from '../../domain/entities/swap';
 import { ISwapProvider, PreparedSwap, RouteParams } from '../../domain/ports/swap.provider.port';
 
 export class UniswapSmartRouterAdapter implements ISwapProvider {
   public readonly name = 'uniswap-smart-router';
+  public readonly metadata: ProviderMetadata = {
+    name: 'uniswap-smart-router',
+    capability: 'swap',
+    supportedChains: [1, 10, 137, 8453, 42161],
+    features: ['same-chain', 'smart-order-router'],
+    version: '1.0.0',
+    // Disabled: keeps the slot in the registry without ever being selected by listByChain default.
+    enabled: false,
+  };
 
   constructor() {
     console.log(`[${this.name}] Smart Order Router disabled; falling back to other providers`);

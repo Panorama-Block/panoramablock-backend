@@ -16,6 +16,7 @@
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
+import type { ProviderMetadata } from '@panorama/capability';
 import { ISwapProvider, RouteParams, PreparedSwap, Transaction } from '../../domain/ports/swap.provider.port';
 import { SwapRequest, SwapQuote, TransactionStatus } from '../../domain/entities/swap';
 import {
@@ -153,6 +154,17 @@ interface UniswapTradingApiConfig {
 
 export class UniswapTradingApiAdapter implements ISwapProvider {
   public readonly name = 'uniswap-trading-api';
+  public readonly metadata: ProviderMetadata = {
+    name: 'uniswap-trading-api',
+    capability: 'swap',
+    // Uniswap Trading API supports the major EVM chains where V2/V3/V4 are deployed.
+    // Chains: Ethereum, Optimism, Polygon, Base, Arbitrum, Avalanche, BNB, World Chain.
+    supportedChains: [1, 10, 137, 8453, 42161, 43114, 56, 480],
+    features: ['same-chain', 'permit2', 'auto-routing', 'uniswapx'],
+    version: '1.0.0',
+    enabled: true,
+  };
+
   private readonly client: AxiosInstance;
   private readonly config: UniswapTradingApiConfig;
   private readonly slippageTolerance?: number;

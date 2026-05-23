@@ -1,5 +1,6 @@
 // Aerodrome Provider Adapter
 // Calls PanoramaBlock Execution Service to route swaps through Aerodrome on Base
+import type { ProviderMetadata } from "@panorama/capability";
 import { ISwapProvider, RouteParams, PreparedSwap, Transaction } from "../../domain/ports/swap.provider.port";
 import { SwapRequest, SwapQuote, TransactionStatus } from "../../domain/entities/swap";
 import { SwapError, SwapErrorCode } from "../../domain/entities/errors";
@@ -19,6 +20,14 @@ const BASE_CHAIN_ID = 8453;
  */
 export class AerodromeProviderAdapter implements ISwapProvider {
   public readonly name = "aerodrome";
+  public readonly metadata: ProviderMetadata = {
+    name: "aerodrome",
+    capability: "swap",
+    supportedChains: [BASE_CHAIN_ID],
+    features: ["same-chain", "stable-pools", "volatile-pools"],
+    version: "1.0.0",
+    enabled: true,
+  };
 
   private readonly client: AxiosInstance;
 

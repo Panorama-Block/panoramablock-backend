@@ -1,4 +1,8 @@
 // Dependency Injection Container
+//
+// Card #230: provider registry is now the shared `ProviderRegistry<ISwapProvider>` from
+// `@panorama/capability`. `RouterDomainService` consumes the registry instead of a private Map.
+import { ProviderRegistry } from "@panorama/capability";
 import { SwapDomainService } from "../../domain/services/swap.domain.service";
 import { RouterDomainService } from "../../domain/services/router.domain.service";
 import {
@@ -60,16 +64,18 @@ export class DIContainer {
     this._chainProviderAdapter = new ChainProviderAdapter();
     this._swapRepositoryAdapter = new SwapRepositoryAdapter();
 
-    // Build provider registry for new multi-provider system
-    // Priority order: Trading API REST > Smart Router SDK > Aerodrome (Base) > Thirdweb
-    const providerMap = new Map<string, ISwapProvider>();
-    providerMap.set(this._uniswapTradingApi.name, this._uniswapTradingApi);   // Priority 1
-    providerMap.set(this._uniswapSmartRouter.name, this._uniswapSmartRouter); // Priority 2
-    providerMap.set(this._aerodromeProvider.name, this._aerodromeProvider);    // Priority 3 (Base only)
-    providerMap.set(this._thirdwebProvider.name, this._thirdwebProvider);      // Priority 4
+    // Build shared ProviderRegistry — single source of truth for swap providers (card #230).
+    // Selection priority is owned by ProviderSelectorService/RouterDomainService for now; the
+    // registry only answers structural questions (listAll, getByName, listByChain). Policy-driven
+    // ranking comes in card #231 (ChainAssetPriorityPolicy migration).
+    const registry = new ProviderRegistry<ISwapProvider>();
+    registry.register(this._uniswapTradingApi);   // enabled
+    registry.register(this._uniswapSmartRouter);  // metadata.enabled = false (kept as registered stub)
+    registry.register(this._aerodromeProvider);   // Base only
+    registry.register(this._thirdwebProvider);    // cross-chain fallback
 
     // Initialize domain services
-    this._routerDomainService = new RouterDomainService(providerMap);
+    this._routerDomainService = new RouterDomainService(registry);
     this._swapDomainService = new SwapDomainService(
       this._thirdwebSwapAdapter, // Keep for backwards compatibility
       this._chainProviderAdapter,

@@ -1,4 +1,5 @@
 // ProviderSelectorService Unit Tests
+import { ProviderRegistry, type ProviderMetadata } from '@panorama/capability';
 import { ProviderSelectorService } from '../provider-selector.service';
 import { RouterDomainService } from '../../../domain/services/router.domain.service';
 import { ISwapProvider } from '../../../domain/ports/swap.provider.port';
@@ -6,7 +7,17 @@ import { SwapRequest, SwapQuote } from '../../../domain/entities/swap';
 
 // Mock Provider
 class MockProvider implements ISwapProvider {
-  constructor(public name: string, private shouldSupport: boolean = true) {}
+  public readonly metadata: ProviderMetadata;
+
+  constructor(public name: string, private shouldSupport: boolean = true) {
+    this.metadata = {
+      name,
+      capability: 'swap',
+      supportedChains: [1],
+      version: '0.0.1',
+      enabled: true,
+    };
+  }
 
   async supportsRoute(): Promise<boolean> {
     return this.shouldSupport;
@@ -45,11 +56,11 @@ describe('ProviderSelectorService', () => {
     mockProvider1 = new MockProvider('provider1');
     mockProvider2 = new MockProvider('provider2');
 
-    const providerMap = new Map<string, ISwapProvider>();
-    providerMap.set(mockProvider1.name, mockProvider1);
-    providerMap.set(mockProvider2.name, mockProvider2);
+    const registry = new ProviderRegistry<ISwapProvider>();
+    registry.register(mockProvider1);
+    registry.register(mockProvider2);
 
-    routerService = new RouterDomainService(providerMap);
+    routerService = new RouterDomainService(registry);
     selectorService = new ProviderSelectorService(routerService);
   });
 
