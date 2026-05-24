@@ -1,5 +1,6 @@
 // Thirdweb Provider Adapter
 // Wraps ThirdwebSwapAdapter to implement ISwapProvider interface
+import type { ProviderMetadata } from "@panorama/capability";
 import { ISwapProvider, RouteParams, PreparedSwap, Transaction } from "../../domain/ports/swap.provider.port";
 import { SwapRequest, SwapQuote, TransactionStatus } from "../../domain/entities/swap";
 import { SwapError, SwapErrorCode } from "../../domain/entities/errors";
@@ -17,6 +18,17 @@ import { sanitizePreparedTransactions } from "./transaction-filter";
  */
 export class ThirdwebProviderAdapter implements ISwapProvider {
   public readonly name = "thirdweb";
+  public readonly metadata: ProviderMetadata = {
+    name: "thirdweb",
+    capability: "swap",
+    // Thirdweb Bridge supports a wide EVM matrix. Per-token availability is checked dynamically
+    // via `isTokenSupported` in supportsRoute(); the manifest below is the broad chain set the
+    // provider can route between (including bridge endpoints).
+    supportedChains: [1, 8453, 137, 42161, 10, 43114, 56, 250, 100],
+    features: ["same-chain", "cross-chain", "bridge"],
+    version: "1.0.0",
+    enabled: true,
+  };
 
   private readonly thirdwebAdapter: ThirdwebSwapAdapter;
 

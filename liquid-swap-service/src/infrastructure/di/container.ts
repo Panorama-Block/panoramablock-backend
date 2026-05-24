@@ -1,4 +1,5 @@
 // Dependency Injection Container
+import { ProviderRegistry } from "@panorama/capability";
 import { SwapDomainService } from "../../domain/services/swap.domain.service";
 import { RouterDomainService } from "../../domain/services/router.domain.service";
 import {
@@ -60,16 +61,14 @@ export class DIContainer {
     this._chainProviderAdapter = new ChainProviderAdapter();
     this._swapRepositoryAdapter = new SwapRepositoryAdapter();
 
-    // Build provider registry for new multi-provider system
-    // Priority order: Trading API REST > Smart Router SDK > Aerodrome (Base) > Thirdweb
-    const providerMap = new Map<string, ISwapProvider>();
-    providerMap.set(this._uniswapTradingApi.name, this._uniswapTradingApi);   // Priority 1
-    providerMap.set(this._uniswapSmartRouter.name, this._uniswapSmartRouter); // Priority 2
-    providerMap.set(this._aerodromeProvider.name, this._aerodromeProvider);    // Priority 3 (Base only)
-    providerMap.set(this._thirdwebProvider.name, this._thirdwebProvider);      // Priority 4
+    const registry = new ProviderRegistry<ISwapProvider>();
+    registry.register(this._uniswapTradingApi);   // enabled
+    registry.register(this._uniswapSmartRouter);  // metadata.enabled = false (kept as registered stub)
+    registry.register(this._aerodromeProvider);   // Base only
+    registry.register(this._thirdwebProvider);    // cross-chain fallback
 
     // Initialize domain services
-    this._routerDomainService = new RouterDomainService(providerMap);
+    this._routerDomainService = new RouterDomainService(registry);
     this._swapDomainService = new SwapDomainService(
       this._thirdwebSwapAdapter, // Keep for backwards compatibility
       this._chainProviderAdapter,

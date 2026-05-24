@@ -1,6 +1,7 @@
 // Uniswap Swap Adapter
 // Implements ISwapProvider using Uniswap Trading API
 import axios, { AxiosInstance } from 'axios';
+import type { ProviderMetadata } from '@panorama/capability';
 import { ISwapProvider, RouteParams, PreparedSwap, Transaction } from "../../domain/ports/swap.provider.port";
 import { SwapRequest, SwapQuote, TransactionStatus } from "../../domain/entities/swap";
 import { resolveToken, listSupportedChainsForProvider } from "../../config/tokens/registry";
@@ -134,6 +135,17 @@ interface OrderResponse {
 
 export class UniswapSwapAdapter implements ISwapProvider {
   public readonly name = "uniswap";
+  public readonly metadata: ProviderMetadata = {
+    name: "uniswap",
+    capability: "swap",
+    // Legacy Uniswap Trading API adapter — same chain coverage as `uniswap-trading-api`.
+    supportedChains: [1, 10, 137, 8453, 42161, 43114, 56, 480],
+    features: ["same-chain", "trading-api"],
+    version: "1.0.0",
+    // Legacy adapter — newer UniswapTradingApiAdapter is preferred. Kept enabled for backward
+    // compat callers that still resolve "uniswap" via the alias map.
+    enabled: true,
+  };
 
   private readonly baseURL: string;
   private readonly apiKey: string;

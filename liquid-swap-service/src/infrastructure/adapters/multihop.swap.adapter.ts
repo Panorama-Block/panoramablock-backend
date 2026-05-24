@@ -10,6 +10,7 @@
  * This adapter wraps existing providers and chains their operations.
  */
 
+import type { ProviderMetadata } from '@panorama/capability';
 import { ISwapProvider, RouteParams, PreparedSwap, Transaction } from '../../domain/ports/swap.provider.port';
 import { SwapRequest, SwapQuote } from '../../domain/entities/swap';
 import { SwapError, SwapErrorCode } from '../../domain/entities/errors';
@@ -37,6 +38,16 @@ interface MultiHopRoute {
 
 export class MultiHopSwapAdapter implements ISwapProvider {
   public readonly name = 'multihop';
+  public readonly metadata: ProviderMetadata = {
+    name: 'multihop',
+    capability: 'swap',
+    // Composite of same-chain (Uniswap) + cross-chain (Thirdweb). Conservative union of their
+    // supported chains; actual reachability is resolved dynamically in supportsRoute().
+    supportedChains: [1, 10, 137, 8453, 42161, 43114, 56],
+    features: ['cross-chain', 'multi-hop', 'bridge-token-pivot'],
+    version: '1.0.0',
+    enabled: true,
+  };
 
   constructor(
     private readonly sameChainProvider: ISwapProvider, // Uniswap Trading API

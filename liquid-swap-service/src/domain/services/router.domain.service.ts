@@ -1,5 +1,6 @@
 // Domain Service - Provider Routing Logic
-// Responsible for selecting the best swap provider based on route characteristics
+// Responsible for selecting the best swap provider based on route characteristics.
+import { ProviderRegistry } from "@panorama/capability";
 import { ISwapProvider, RouteParams } from "../ports/swap.provider.port";
 import { SwapRequest, SwapQuote } from "../entities/swap";
 
@@ -28,10 +29,13 @@ const BASE_CHAIN_ID = 8453;
 export class RouterDomainService {
   private readonly smartRouterQuoteTimeoutMs: number;
 
-  constructor(private readonly providers: Map<string, ISwapProvider>) {
+  constructor(private readonly registry: ProviderRegistry<ISwapProvider>) {
+    const providerNames = registry
+      .listAll({ includeDisabled: true })
+      .map((p) => p.name);
     console.log(
-      `[RouterDomainService] Initialized with ${providers.size} providers:`,
-      Array.from(providers.keys())
+      `[RouterDomainService] Initialized with ${registry.size()} providers:`,
+      providerNames
     );
 
     const rawTimeout = process.env.SMART_ROUTER_QUOTE_TIMEOUT_MS;
@@ -106,7 +110,12 @@ export class RouterDomainService {
   private async getSupportedProviders(
     params: RouteParams
   ): Promise<ISwapProvider[]> {
-    const checks = Array.from(this.providers.values()).map(async (provider) => {
+    // includeDisabled: true preserves pre-Registry behaviour — every registered adapter is
+    // consulted regardless of `metadata.enabled`. Disabled adapters return false from
+    // supportsRoute() so they self-filter without special-case branching here.
+    const all = this.registry.listAll({ includeDisabled: true });
+
+    const checks = all.map(async (provider) => {
       try {
         const supports = await provider.supportsRoute(params);
         return supports ? provider : null;
@@ -422,25 +431,27 @@ export class RouterDomainService {
   }
 
   /**
-   * Get a specific provider by name
+   * Get a specific provider by name.
    *
    * Useful for when user explicitly requests a provider
    */
   public getProviderByName(name: string): ISwapProvider | undefined {
-    return this.providers.get(name);
+    return this.registry.getByName(name);
   }
 
   /**
-   * Check if a provider exists
+   * Check if a provider exists.
    */
   public hasProvider(name: string): boolean {
-    return this.providers.has(name);
+    return this.registry.getByName(name) !== undefined;
   }
 
   /**
-   * Get all available provider names
+   * Get all available provider names.
    */
   public getAvailableProviders(): string[] {
-    return Array.from(this.providers.keys());
+    return this.registry
+      .listAll({ includeDisabled: true })
+      .map((p) => p.name);
   }
 }

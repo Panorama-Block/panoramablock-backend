@@ -1,5 +1,7 @@
 // Domain Port - Generic Swap Provider Interface
-// This port enables multiple swap providers (Uniswap, Thirdweb, etc.) with dependency inversion
+// Extends ICapabilityProvider so every swap adapter participates in the shared
+// Capability + Provider pattern (ProviderMetadata, healthCheck, ProviderRegistry).
+import { ICapabilityProvider } from "@panorama/capability";
 import { SwapRequest, SwapQuote, TransactionStatus } from "../entities/swap";
 
 /**
@@ -52,10 +54,20 @@ export interface PreparedSwap {
  * Generic interface that all swap providers must implement.
  * Enables the router to use any provider transparently.
  *
+ * Extends `ICapabilityProvider`, which adds:
+ *  - `readonly metadata: ProviderMetadata` — declarative chain/feature/version description
+ *  - optional `healthCheck()` — polled by `ProviderHealthTracker`
+ *
  * @example
  * ```typescript
  * class UniswapProvider implements ISwapProvider {
- *   readonly name = 'uniswap';
+ *   readonly name = 'uniswap-trading-api';
+ *   readonly metadata: ProviderMetadata = {
+ *     name: 'uniswap-trading-api',
+ *     capability: 'swap',
+ *     supportedChains: [1, 8453, 137, 42161, 10],
+ *     version: '1.0.0',
+ *   };
  *
  *   async supportsRoute(params: RouteParams): Promise<boolean> {
  *     // Check if Uniswap can handle this route
@@ -68,11 +80,12 @@ export interface PreparedSwap {
  * }
  * ```
  */
-export interface ISwapProvider {
+export interface ISwapProvider extends ICapabilityProvider {
   /**
-   * Provider identifier
+   * Provider identifier — must match `metadata.name`. Inherited from `ICapabilityProvider`
+   * but redeclared here for the IDE hover doc and existing callers.
    *
-   * @example 'uniswap', 'thirdweb', '1inch'
+   * @example 'uniswap-trading-api', 'thirdweb', 'aerodrome'
    */
   readonly name: string;
 

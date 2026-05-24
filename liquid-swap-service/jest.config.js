@@ -6,6 +6,10 @@ module.exports = {
   transform: {
     '^.+\\.ts$': 'ts-jest',
   },
+  moduleNameMapper: {
+    '^@panorama/capability$': '<rootDir>/../shared/capability/index.ts',
+    '^@panorama/capability/(.*)$': '<rootDir>/../shared/capability/$1',
+  },
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.d.ts',

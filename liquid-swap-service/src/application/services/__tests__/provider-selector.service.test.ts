@@ -1,4 +1,5 @@
 // ProviderSelectorService Unit Tests
+import { ProviderRegistry, type ProviderMetadata } from '@panorama/capability';
 import { ProviderSelectorService } from '../provider-selector.service';
 import { RouterDomainService } from '../../../domain/services/router.domain.service';
 import { ISwapProvider } from '../../../domain/ports/swap.provider.port';
@@ -6,7 +7,17 @@ import { SwapRequest, SwapQuote } from '../../../domain/entities/swap';
 
 // Mock Provider
 class MockProvider implements ISwapProvider {
-  constructor(public name: string, private shouldSupport: boolean = true) {}
+  public readonly metadata: ProviderMetadata;
+
+  constructor(public name: string, private shouldSupport: boolean = true) {
+    this.metadata = {
+      name,
+      capability: 'swap',
+      supportedChains: [1],
+      version: '0.0.1',
+      enabled: true,
+    };
+  }
 
   async supportsRoute(): Promise<boolean> {
     return this.shouldSupport;
@@ -42,14 +53,14 @@ describe('ProviderSelectorService', () => {
   let mockProvider2: MockProvider;
 
   beforeEach(() => {
-    mockProvider1 = new MockProvider('provider1');
-    mockProvider2 = new MockProvider('provider2');
+    mockProvider1 = new MockProvider('uniswap-trading-api');
+    mockProvider2 = new MockProvider('thirdweb');
 
-    const providerMap = new Map<string, ISwapProvider>();
-    providerMap.set(mockProvider1.name, mockProvider1);
-    providerMap.set(mockProvider2.name, mockProvider2);
+    const registry = new ProviderRegistry<ISwapProvider>();
+    registry.register(mockProvider1);
+    registry.register(mockProvider2);
 
-    routerService = new RouterDomainService(providerMap);
+    routerService = new RouterDomainService(registry);
     selectorService = new ProviderSelectorService(routerService);
   });
 
@@ -86,7 +97,7 @@ describe('ProviderSelectorService', () => {
       const result = await selectorService.getQuoteWithBestProvider(request);
 
       expect(typeof result.provider).toBe('string');
-      expect(['provider1', 'provider2']).toContain(result.provider);
+      expect(['uniswap-trading-api', 'thirdweb']).toContain(result.provider);
     });
 
     it('should return valid quote object', async () => {
@@ -122,9 +133,9 @@ describe('ProviderSelectorService', () => {
         '0x1234567890123456789012345678901234567890'
       );
 
-      const result = await selectorService.prepareSwapWithProvider(request, 'provider1');
+      const result = await selectorService.prepareSwapWithProvider(request, 'uniswap-trading-api');
 
-      expect(result.provider).toBe('provider1');
+      expect(result.provider).toBe('uniswap-trading-api');
       expect(result.prepared).toBeDefined();
       expect(result.prepared.transactions).toBeDefined();
       expect(Array.isArray(result.prepared.transactions)).toBe(true);
@@ -157,7 +168,7 @@ describe('ProviderSelectorService', () => {
         '0x1234567890123456789012345678901234567890'
       );
 
-      const result = await selectorService.prepareSwapWithProvider(request, 'provider1');
+      const result = await selectorService.prepareSwapWithProvider(request, 'uniswap-trading-api');
 
       expect(result.prepared).toBeDefined();
       expect(result.prepared.estimatedDuration).toBeDefined();
@@ -237,7 +248,7 @@ describe('ProviderSelectorService', () => {
         '0x1234567890123456789012345678901234567890'
       );
 
-      await selectorService.prepareSwapWithProvider(request, 'provider1');
+      await selectorService.prepareSwapWithProvider(request, 'uniswap-trading-api');
 
       expect(prepareSwapSpy).toHaveBeenCalledWith(request);
     });

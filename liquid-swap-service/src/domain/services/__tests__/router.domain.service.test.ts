@@ -1,4 +1,5 @@
 // RouterDomainService Unit Tests
+import { ProviderRegistry, type ProviderMetadata } from '@panorama/capability';
 import { RouterDomainService } from '../router.domain.service';
 import { ISwapProvider } from '../../ports/swap.provider.port';
 import { SwapRequest, SwapQuote } from '../../entities/swap';
@@ -6,6 +7,13 @@ import { SwapRequest, SwapQuote } from '../../entities/swap';
 // Mock Provider
 class MockUniswapProvider implements ISwapProvider {
   name = 'uniswap';
+  readonly metadata: ProviderMetadata = {
+    name: 'uniswap',
+    capability: 'swap',
+    supportedChains: [1],
+    version: '0.0.1',
+    enabled: true,
+  };
 
   async supportsRoute(params: any): Promise<boolean> {
     return params.fromChainId === params.toChainId && params.fromChainId === 1;
@@ -32,6 +40,13 @@ class MockUniswapProvider implements ISwapProvider {
 
 class MockThirdwebProvider implements ISwapProvider {
   name = 'thirdweb';
+  readonly metadata: ProviderMetadata = {
+    name: 'thirdweb',
+    capability: 'swap',
+    supportedChains: [1, 137, 8453],
+    version: '0.0.1',
+    enabled: true,
+  };
 
   async supportsRoute(): Promise<boolean> {
     return true; // Always supports
@@ -60,25 +75,25 @@ describe('RouterDomainService', () => {
   let routerService: RouterDomainService;
   let mockUniswap: MockUniswapProvider;
   let mockThirdweb: MockThirdwebProvider;
-  let providerMap: Map<string, ISwapProvider>;
+  let registry: ProviderRegistry<ISwapProvider>;
 
   beforeEach(() => {
     mockUniswap = new MockUniswapProvider();
     mockThirdweb = new MockThirdwebProvider();
-    providerMap = new Map();
-    providerMap.set(mockUniswap.name, mockUniswap);
-    providerMap.set(mockThirdweb.name, mockThirdweb);
-    routerService = new RouterDomainService(providerMap);
+    registry = new ProviderRegistry<ISwapProvider>();
+    registry.register(mockUniswap);
+    registry.register(mockThirdweb);
+    routerService = new RouterDomainService(registry);
   });
 
   describe('Initialization', () => {
     it('should initialize with correct number of providers', () => {
-      expect(providerMap.size).toBe(2);
+      expect(registry.size()).toBe(2);
     });
 
     it('should have uniswap and thirdweb providers', () => {
-      expect(providerMap.has('uniswap')).toBe(true);
-      expect(providerMap.has('thirdweb')).toBe(true);
+      expect(registry.getByName('uniswap')).toBeDefined();
+      expect(registry.getByName('thirdweb')).toBeDefined();
     });
   });
 
