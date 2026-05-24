@@ -1,10 +1,5 @@
 // Domain Service - Provider Routing Logic
 // Responsible for selecting the best swap provider based on route characteristics.
-//
-// Card #230: consumes the shared `ProviderRegistry<ISwapProvider>` from `@panorama/capability`
-// instead of a private `Map<string, ISwapProvider>`. Behaviour is preserved — same selection
-// priorities, same fallbacks. Internal lookup helpers (`getProviderByName`, `hasProvider`,
-// `getAvailableProviders`) now delegate to the registry; the public surface is unchanged.
 import { ProviderRegistry } from "@panorama/capability";
 import { ISwapProvider, RouteParams } from "../ports/swap.provider.port";
 import { SwapRequest, SwapQuote } from "../entities/swap";
@@ -436,7 +431,7 @@ export class RouterDomainService {
   }
 
   /**
-   * Get a specific provider by name. Delegates to the shared registry (card #230).
+   * Get a specific provider by name.
    *
    * Useful for when user explicitly requests a provider
    */
@@ -445,16 +440,14 @@ export class RouterDomainService {
   }
 
   /**
-   * Check if a provider exists. Delegates to the shared registry (card #230).
+   * Check if a provider exists.
    */
   public hasProvider(name: string): boolean {
     return this.registry.getByName(name) !== undefined;
   }
 
   /**
-   * Get all available provider names. Delegates to the shared registry (card #230).
-   * Includes disabled adapters to preserve pre-refactor behaviour — call sites that need
-   * only the active set can filter via the registry's options.
+   * Get all available provider names.
    */
   public getAvailableProviders(): string[] {
     return this.registry

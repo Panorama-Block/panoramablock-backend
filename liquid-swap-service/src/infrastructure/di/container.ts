@@ -1,7 +1,4 @@
 // Dependency Injection Container
-//
-// Card #230: provider registry is now the shared `ProviderRegistry<ISwapProvider>` from
-// `@panorama/capability`. `RouterDomainService` consumes the registry instead of a private Map.
 import { ProviderRegistry } from "@panorama/capability";
 import { SwapDomainService } from "../../domain/services/swap.domain.service";
 import { RouterDomainService } from "../../domain/services/router.domain.service";
@@ -64,10 +61,6 @@ export class DIContainer {
     this._chainProviderAdapter = new ChainProviderAdapter();
     this._swapRepositoryAdapter = new SwapRepositoryAdapter();
 
-    // Build shared ProviderRegistry — single source of truth for swap providers (card #230).
-    // Selection priority is owned by ProviderSelectorService/RouterDomainService for now; the
-    // registry only answers structural questions (listAll, getByName, listByChain). Policy-driven
-    // ranking comes in card #231 (ChainAssetPriorityPolicy migration).
     const registry = new ProviderRegistry<ISwapProvider>();
     registry.register(this._uniswapTradingApi);   // enabled
     registry.register(this._uniswapSmartRouter);  // metadata.enabled = false (kept as registered stub)

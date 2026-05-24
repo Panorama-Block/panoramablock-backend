@@ -1,14 +1,6 @@
 // Domain Port - Generic Swap Provider Interface
-// This port enables multiple swap providers (Uniswap, Thirdweb, etc.) with dependency inversion.
-//
-// Extends `ICapabilityProvider` from `@panorama/capability` (card #229) so every swap adapter
-// participates in the shared Capability + Provider pattern: declares ProviderMetadata, may expose
-// healthCheck(), and is registrable in the shared ProviderRegistry.
-//
-// See:
-// - `@panorama/capability/provider.types.ts` for the parent interface
-// - `liquid-swap-service/docs/swap-capability.md` for the swap-specific contract
-// - SPRINT_KICKOFF.md §3 "Capability + Provider pattern"
+// Extends ICapabilityProvider so every swap adapter participates in the shared
+// Capability + Provider pattern (ProviderMetadata, healthCheck, ProviderRegistry).
 import { ICapabilityProvider } from "@panorama/capability";
 import { SwapRequest, SwapQuote, TransactionStatus } from "../entities/swap";
 
@@ -62,7 +54,7 @@ export interface PreparedSwap {
  * Generic interface that all swap providers must implement.
  * Enables the router to use any provider transparently.
  *
- * Extends `ICapabilityProvider` (card #229), which adds:
+ * Extends `ICapabilityProvider`, which adds:
  *  - `readonly metadata: ProviderMetadata` — declarative chain/feature/version description
  *  - optional `healthCheck()` — polled by `ProviderHealthTracker`
  *
