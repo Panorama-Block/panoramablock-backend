@@ -1,8 +1,6 @@
 /**
  * Domain entities for the liquidity capability.
- *
- * Card #250 — minimal shape that all LP providers (Aerodrome, Trader Joe, future Curve)
- * can populate. Provider-specific extras live in `metadata` / `extra` records.
+ * Provider-specific extras live in `metadata` / `extra` records.
  */
 
 import type { Address, ChainId, WeiString } from '@panorama/capability';

@@ -1,10 +1,8 @@
 /**
  * LiquidityController — thin HTTP adapter on top of `LiquidityCapabilityService`.
  *
- * Card #252. Parses Express request → `CapabilityRequest<T>`, calls the facade, wraps the
+ * Parses Express request → `CapabilityRequest<T>`, calls the facade, wraps the
  * result in `CapabilityResponse<T>`. Zero business logic — that's the facade's job.
- *
- * Mirrors `lido-service/src/infrastructure/http/controllers/StakingController.ts`.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -94,7 +92,7 @@ export class LiquidityController {
 
   /** GET /v1/capability/liquidity/pools?chainId=8453&type=stable&asset=0x... */
   async getPools(req: Request, res: Response): Promise<void> {
-    await this.run<GetPoolsFilter, Pool[]>(req, res, async (envelope) => {
+    await this.run<GetPoolsFilter>(req, res, async (envelope) => {
       const outcome = await this.facade.getPools(envelope);
       return this.toResponse(outcome, envelope.traceId);
     }, () => {
@@ -112,7 +110,7 @@ export class LiquidityController {
 
   /** GET /v1/capability/liquidity/position/:address/:poolId?chainId=8453 */
   async getPosition(req: Request, res: Response): Promise<void> {
-    await this.run<{ poolId: string }, unknown>(req, res, async (envelope) => {
+    await this.run<{ poolId: string }>(req, res, async (envelope) => {
       const outcome = await this.facade.getPosition(envelope);
       return this.toResponse(outcome, envelope.traceId);
     }, () => {
@@ -134,7 +132,7 @@ export class LiquidityController {
 
   /** GET /v1/capability/liquidity/apr/:poolId?chainId=8453 */
   async getApr(req: Request, res: Response): Promise<void> {
-    await this.run<{ poolId: string }, unknown>(req, res, async (envelope) => {
+    await this.run<{ poolId: string }>(req, res, async (envelope) => {
       const outcome = await this.facade.getApr(envelope);
       return this.toResponse(outcome, envelope.traceId);
     }, () => {
@@ -181,7 +179,7 @@ export class LiquidityController {
   // Helpers
   // -----------------------------------------------------------------------------------------------
 
-  private async run<TPayload, _TData>(
+  private async run<TPayload>(
     req: Request,
     res: Response,
     handler: (envelope: CapabilityRequest<TPayload>) => Promise<{

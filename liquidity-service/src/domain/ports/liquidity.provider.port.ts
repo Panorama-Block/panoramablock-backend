@@ -1,15 +1,8 @@
 /**
  * ILiquidityProvider — liquidity capability port.
  *
- * Every LP provider (Aerodrome on Base, Trader Joe LB on Avax, future Uniswap V4 LP) implements
- * this interface. The capability facade (`LiquidityCapabilityService`) speaks only this port —
- * never an adapter concrete class.
- *
- * Card #250. See:
- * - `@panorama/capability/provider.types.ts` for `ICapabilityProvider`
- * - `liquidity-service/docs/liquidity-capability.md` for the contract narrative
- * - SPRINT_KICKOFF.md §3 "Capability + Provider pattern"
- * - ADR 002 (capability + provider)
+ * Every LP provider (Aerodrome, Trader Joe LB, etc.) implements this interface.
+ * The capability facade speaks only this port — never an adapter concrete class.
  */
 
 import type {

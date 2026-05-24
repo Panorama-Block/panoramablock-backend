@@ -1,12 +1,9 @@
 /**
  * Composition root for the liquidity capability.
  *
- * Card #251. Builds the registry, instantiates concrete adapters (none in this scaffold —
- * Aerodrome LP adapter lands in card #253, Trader Joe stub in #254), wires the policy, mounts
- * the discovery handler, and returns the facade + handler. `app.ts` consumes only what's returned.
- *
- * The registry starts EMPTY in this PR — discovery endpoint reports an empty provider set, which
- * is the expected outcome until #253 registers `AerodromeLpAdapter`.
+ * Builds the registry, wires the policy + discovery handler, and returns the
+ * facade + handler. `app.ts` consumes only what's returned. The registry starts
+ * empty — concrete adapters are registered as they land.
  */
 
 import {
@@ -46,9 +43,6 @@ export function buildLiquidityContainer(
     registry.register(p);
   }
 
-  // Default policy — empty per-chain priority lists. Fully populated as adapters land:
-  //   #253 → '8453' (Base): ['aerodrome-lp']
-  //   #254 → '43114' (Avax): ['traderjoe-lp'] (stub, enabled:false by default)
   const policy = new ChainAssetPriorityPolicy(options.policy ?? {});
 
   const facade = new LiquidityCapabilityService({ registry, policy });

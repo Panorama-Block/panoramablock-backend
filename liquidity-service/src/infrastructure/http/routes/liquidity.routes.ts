@@ -1,9 +1,5 @@
 /**
- * Routes for `/v1/capability/liquidity/*`.
- *
- * Card #252. Mounted in `app.ts`. No legacy `/api/liquidity/*` route exists — this is a brand
- * new capability with no predecessor to keep alive (CONVENTIONS.md §4 backward-compat clause
- * does not apply).
+ * Routes for `/v1/capability/liquidity/*`. Mounted in `app.ts`.
  */
 
 import { Router } from 'express';

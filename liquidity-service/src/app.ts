@@ -1,13 +1,8 @@
 /**
  * Express bootstrap for liquidity-service.
  *
- * Card #251. Mounts:
- *   - /health                        → service liveness
- *   - /                              → metadata (name, version, endpoint catalogue)
- *   - /v1/capability/liquidity/*     → capability routes (see liquidity.routes.ts)
- *
- * Composition: `buildLiquidityContainer` (card #251) is the single place that touches concrete
- * adapters. The app receives ports + handlers only.
+ * Mounts /health, /, and /v1/capability/liquidity/* routes.
+ * `buildLiquidityContainer` is the single place that touches concrete adapters.
  */
 
 import cors from 'cors';

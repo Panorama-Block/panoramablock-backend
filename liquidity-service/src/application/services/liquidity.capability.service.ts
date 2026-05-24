@@ -1,11 +1,9 @@
 /**
  * LiquidityCapabilityService — facade for the liquidity capability.
  *
- * Card #251. Orchestrates `ProviderRegistry<ILiquidityProvider>` + `IPriorityPolicy` using the
- * `fallbackInvoke` helper from `@panorama/capability`. The controller never knows about specific
- * providers (Aerodrome, Trader Joe) — only this facade.
- *
- * See SPRINT_KICKOFF.md §3 + §4 for the pattern.
+ * Orchestrates `ProviderRegistry<ILiquidityProvider>` + `IPriorityPolicy` using
+ * `fallbackInvoke` from `@panorama/capability`. The controller never knows about
+ * specific providers — only this facade.
  */
 
 import {

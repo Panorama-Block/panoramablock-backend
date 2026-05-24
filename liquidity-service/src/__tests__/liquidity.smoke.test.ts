@@ -1,9 +1,5 @@
 /**
  * Smoke test for liquidity-service.
- *
- * Card #251 DoD: service responds to GET `/v1/capability/liquidity/_discovery` (empty providers
- * is the expected outcome until #253 registers AerodromeLpAdapter).
- *
  * Runs against the in-process Express app via supertest — no network, no DB.
  */
 
