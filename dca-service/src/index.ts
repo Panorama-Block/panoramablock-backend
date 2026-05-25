@@ -5,6 +5,11 @@ import { DatabaseService } from './services/database.service';
 import { dcaRoutes } from './routes/dca.routes';
 import { createTransactionRoutes } from './routes/transaction.routes';
 import { vaultDcaRoutes } from './routes/vault.dca.routes';
+import {
+  createCapabilityRouter,
+  createLegacyCapabilityShim,
+  createLegacyTransactionShim,
+} from './infrastructure/http/routes/capability.router';
 import { startDCAExecutor } from './jobs/dca.executor';
 import { AuditLogger } from './services/auditLog.service';
 import {
@@ -116,11 +121,15 @@ async function initializeDatabase() {
     const auditLogger = AuditLogger.getInstance();
     console.log('[DCA Service] ✅ Audit Logger initialized');
 
-    // Register routes
-    app.use('/dca', dcaRoutes());
+    // v1 capability routes (new)
+    app.use('/v1/capability', createCapabilityRouter());
+    console.log('[DCA Service] ✅ Capability routes registered: /v1/capability/dca/* + /v1/capability/_discovery');
+
+    // Legacy routes (deprecated) — kept for backwards compatibility with Deprecation + Sunset headers
+    app.use('/dca', createLegacyCapabilityShim());
     app.use('/dca/vault', vaultDcaRoutes());
-    app.use('/transaction', createTransactionRoutes());
-    console.log('[DCA Service] ✅ Routes registered');
+    app.use('/transaction', createLegacyTransactionShim());
+    console.log('[DCA Service] ✅ Legacy routes registered with Deprecation headers');
 
     // 404 handler - MUST be after all routes
     app.use((req, res) => {
