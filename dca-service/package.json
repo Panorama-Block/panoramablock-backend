@@ -4,9 +4,9 @@
   "description": "DCA (Dollar Cost Averaging) Service with Account Abstraction",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev": "ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node -r tsconfig-paths/register dist/index.js",
     "setup-db": "ts-node src/scripts/setup-database.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -29,6 +29,7 @@
     "@types/node": "^20.5.9",
     "@types/node-cron": "^3.0.11",
     "ts-node-dev": "^2.0.0",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.2.2"
   }
 }

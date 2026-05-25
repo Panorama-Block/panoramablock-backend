@@ -233,6 +233,21 @@ app.use('/validation-swap', validationSwapRoutes);
 app.use('/benqi', benqiRoutes);
 app.use('/benqi-validation', benqiValidationRoutes);
 
+// Capability routes (/v1/capability/lend/* and /v1/capability/_discovery)
+// Built from TypeScript via `npm run build` — loaded at runtime from dist/
+try {
+  const { buildLendingContainer } = require('./dist/infrastructure/di/container');
+  const { createCapabilityRouter } = require('./dist/infrastructure/http/routes/capability.router');
+  const container = buildLendingContainer();
+  container.start();
+  app.use('/v1/capability', createCapabilityRouter(container.facade, container.discoveryHandler));
+  console.log('✅ Capability routes mounted at /v1/capability/lend/*');
+  process.on('SIGTERM', () => container.stop());
+  process.on('SIGINT', () => container.stop());
+} catch (err) {
+  console.warn('⚠️  Capability layer not loaded (run `npm run build` first):', err.message);
+}
+
 // Middleware de tratamento de erros
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
