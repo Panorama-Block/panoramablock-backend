@@ -7,6 +7,7 @@ import { BridgeProviderPort } from '../../domain/ports/BridgeProviderPort';
 
 // Infrastructure implementations
 import { LayerswapAdapter } from '../adapters/LayerswapAdapter';
+import { LayerswapBridgeAdapter } from '../adapters/LayerswapBridgeAdapter';
 import { ThirdwebWalletAdapter } from '../adapters/ThirdwebWalletAdapter';
 import { WdkWalletAdapter } from '../adapters/WdkWalletAdapter';
 import { DatabaseGatewayClient } from '../clients/DatabaseGatewayClient';
@@ -19,6 +20,7 @@ import { LiquidStakingClient } from '../clients/LiquidStakingClient';
 import { CreateBridgeTransactionUseCase } from '../../application/use-cases/CreateBridgeTransactionUseCase';
 import { GetBridgeQuoteUseCase } from '../../application/use-cases/GetBridgeQuoteUseCase';
 import { GetBridgeStatusUseCase } from '../../application/use-cases/GetBridgeStatusUseCase';
+import { BridgeCapabilityService } from '../../application/bridge.capability.service';
 import { PanoramaV1Service } from '../../application/services/PanoramaV1Service';
 import { WalletBalanceReader } from '../../application/services/WalletBalanceReader';
 
@@ -31,6 +33,8 @@ export interface DIContainer {
   config: EnvironmentConfig;
   database: PrismaClient;
   layerswapAdapter: BridgeProviderPort;
+  layerswapBridgeAdapter: LayerswapBridgeAdapter;
+  bridgeCapabilityService: BridgeCapabilityService;
   createBridgeTransaction: CreateBridgeTransactionUseCase;
   getBridgeQuote: GetBridgeQuoteUseCase;
   getBridgeStatus: GetBridgeStatusUseCase;
@@ -63,6 +67,8 @@ export async function createDIContainer(): Promise<DIContainer> {
   await database.$connect();
 
   const layerswapAdapter = new LayerswapAdapter();
+  const layerswapBridgeAdapter = new LayerswapBridgeAdapter();
+  const bridgeCapabilityService = new BridgeCapabilityService([layerswapBridgeAdapter]);
   const runtimeConfig = createBridgeRuntimeConfig({
     tokenRegistryPath: process.env.TOKEN_REGISTRY_PATH,
     swapSubmissionReconciliationMs: Number(process.env.PANORAMA_SWAP_SUBMISSION_RECONCILIATION_MS || 120000),
@@ -147,6 +153,8 @@ export async function createDIContainer(): Promise<DIContainer> {
     config,
     database,
     layerswapAdapter,
+    layerswapBridgeAdapter,
+    bridgeCapabilityService,
     createBridgeTransaction,
     getBridgeQuote,
     getBridgeStatus,

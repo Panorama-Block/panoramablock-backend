@@ -10,6 +10,7 @@ import { createIdempotencyMiddleware } from './middlewares/idempotency.js';
 import { createCrudHandlers } from './handlers/crud.js';
 import { createTransactHandler } from './handlers/transact.js';
 import { createSearchEmbeddingHandler } from './handlers/searchEmbedding.js';
+import { createCapabilityDiscoveryHandler } from './handlers/capabilityDiscovery.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../../../packages/core/services/index.js';
 
 export interface AppDependencies {
@@ -49,6 +50,7 @@ export const buildApp = ({
   const crudHandlers = createCrudHandlers(repository, idempotencyStore);
   const transactHandler = createTransactHandler(repository, idempotencyStore);
   const searchHandler = createSearchEmbeddingHandler(repository);
+  const discoveryHandler = createCapabilityDiscoveryHandler(prisma);
   const idempotencyMiddleware = createIdempotencyMiddleware(idempotencyStore);
 
   app.register(cors, {
@@ -96,6 +98,7 @@ export const buildApp = ({
 
   app.post('/v1/_transact', transactHandler);
   app.post('/v1/:entity/_search-embedding', searchHandler);
+  app.get('/v1/capability/_discovery', discoveryHandler);
 
   app.addHook('onClose', async () => {
     await prisma.$disconnect();

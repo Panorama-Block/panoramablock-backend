@@ -26,6 +26,7 @@ export const CAPABILITY_SLUGS = [
   "bridge",
   "automation",
   "auth",
+  "agent",
 ] as const;
 
 export type CapabilitySlug = (typeof CAPABILITY_SLUGS)[number];

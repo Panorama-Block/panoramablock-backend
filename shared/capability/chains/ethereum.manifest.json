@@ -12,5 +12,5 @@
     "https://rpc.ankr.com/eth"
   ],
   "blockExplorerUrl": "https://etherscan.io",
-  "capabilitiesSupported": ["swap", "staking"]
+  "capabilitiesSupported": ["swap", "staking", "bridge"]
 }

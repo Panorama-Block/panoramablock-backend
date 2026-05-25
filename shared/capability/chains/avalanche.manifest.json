@@ -12,5 +12,5 @@
     "https://avalanche-c-chain-rpc.publicnode.com"
   ],
   "blockExplorerUrl": "https://snowtrace.io",
-  "capabilitiesSupported": ["swap", "lending", "liquidity", "staking"]
+  "capabilitiesSupported": ["swap", "lending", "liquidity", "staking", "bridge"]
 }
