@@ -259,36 +259,36 @@ describe("loadChains — from a real directory", () => {
 });
 
 describe("loadChains — auto-load default directory", () => {
-  it("loads the three committed manifests (base, avalanche, ethereum)", () => {
-    // Default directory is the chains/ dir of this package — should contain the manifests
-    // we ship as part of cards #212-#214.
+  it("loads committed manifests (base, avalanche, ethereum, arbitrum, ton)", () => {
     _resetChainsCache();
     const chains = loadChains();
     const slugs = chains.map((c) => c.slug).sort();
-    expect(slugs).toEqual(["avalanche", "base", "ethereum"]);
+    expect(slugs).toEqual(["arbitrum", "avalanche", "base", "ethereum", "ton"]);
 
     expect(getChain("base").id).toBe(8453);
     expect(getChain("avalanche").id).toBe(43114);
     expect(getChain("ethereum").id).toBe(1);
+    expect(getChain("arbitrum").id).toBe(42161);
+    expect(getChain("ton").id).toBe(607);
   });
 
-  it("Base manifest declares swap, lending, liquidity", () => {
+  it("Base manifest declares swap, lending, liquidity, bridge", () => {
     _resetChainsCache();
     const base = getChain("base");
-    expect(new Set(base.capabilitiesSupported)).toEqual(new Set(["swap", "lending", "liquidity"]));
+    expect(new Set(base.capabilitiesSupported)).toEqual(new Set(["swap", "lending", "liquidity", "bridge"]));
   });
 
-  it("Avalanche manifest declares swap, lending, liquidity, staking", () => {
+  it("Avalanche manifest declares swap, lending, liquidity, staking, bridge", () => {
     _resetChainsCache();
     const av = getChain("avalanche");
     expect(new Set(av.capabilitiesSupported)).toEqual(
-      new Set(["swap", "lending", "liquidity", "staking"])
+      new Set(["swap", "lending", "liquidity", "staking", "bridge"])
     );
   });
 
-  it("Ethereum manifest declares swap, staking", () => {
+  it("Ethereum manifest declares swap, staking, bridge", () => {
     _resetChainsCache();
     const eth = getChain("ethereum");
-    expect(new Set(eth.capabilitiesSupported)).toEqual(new Set(["swap", "staking"]));
+    expect(new Set(eth.capabilitiesSupported)).toEqual(new Set(["swap", "staking", "bridge"]));
   });
 });
