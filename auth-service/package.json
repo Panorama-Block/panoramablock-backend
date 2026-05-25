@@ -4,9 +4,9 @@
   "description": "Authentication service using ThirdWeb",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev": "ts-node-dev -r tsconfig-paths/register --respawn --transpile-only src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node -r tsconfig-paths/register dist/index.js",
     "test": "node --test -r ts-node/register src/ton/__tests__/*.test.ts"
   },
   "dependencies": {
@@ -23,6 +23,7 @@
     "@types/node": "^20.5.9",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.2.2"
   }
 }

@@ -7,6 +7,8 @@ import { createClient, RedisClientType } from 'redis';
 import authRoutes from './routes/auth';
 import { getAuthInstance, isAuthConfigured } from './utils/thirdwebAuth';
 import { requestLogger, errorLogger } from './middleware/loggingMiddleware';
+import { AuthCapabilityService } from './application/services/auth.capability.service';
+import { capabilityRouter } from './http/capability.router';
 
 // Load environment variables
 dotenv.config();
@@ -142,6 +144,10 @@ redisClient.on('error', (err) => {
 
 // Pass Redis client to routes
 app.use('/auth', authRoutes(redisClient));
+
+// Capability layer — new versioned endpoints
+const authCapabilityService = new AuthCapabilityService(redisClient);
+app.use('/v1/capability', capabilityRouter(authCapabilityService));
 
 // Add error logging middleware
 app.use(errorLogger);
