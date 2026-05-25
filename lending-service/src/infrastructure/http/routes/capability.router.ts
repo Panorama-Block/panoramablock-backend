@@ -99,7 +99,7 @@ export function createCapabilityRouter(
           provider: outcome.provider,
           traceId: tid,
           latencyMs: Date.now() - start,
-          attemptedProviders: outcome.attempts,
+          attemptedProviders: outcome.attempts.map((a: { provider: string; reason: string }) => ({ name: a.provider, reason: a.reason })),
         }),
       );
     } catch (err) {
@@ -128,7 +128,7 @@ export function createCapabilityRouter(
           provider: outcome.provider,
           traceId: tid,
           latencyMs: Date.now() - start,
-          attemptedProviders: outcome.attempts,
+          attemptedProviders: outcome.attempts.map((a: { provider: string; reason: string }) => ({ name: a.provider, reason: a.reason })),
         }),
       );
     } catch (err) {
@@ -192,7 +192,7 @@ export function createCapabilityRouter(
           provider: outcome.provider,
           traceId: tid,
           latencyMs: Date.now() - start,
-          attemptedProviders: outcome.attempts,
+          attemptedProviders: outcome.attempts.map((a: { provider: string; reason: string }) => ({ name: a.provider, reason: a.reason })),
         }),
       );
     } catch (err) {
@@ -228,7 +228,7 @@ export function createCapabilityRouter(
           provider: outcome.provider,
           traceId: tid,
           latencyMs: Date.now() - start,
-          attemptedProviders: outcome.attempts,
+          attemptedProviders: outcome.attempts.map((a: { provider: string; reason: string }) => ({ name: a.provider, reason: a.reason })),
         }),
       );
     } catch (err) {
@@ -260,7 +260,7 @@ export function createCapabilityRouter(
           provider: outcome.provider,
           traceId: tid,
           latencyMs: Date.now() - start,
-          attemptedProviders: outcome.attempts,
+          attemptedProviders: outcome.attempts.map((a: { provider: string; reason: string }) => ({ name: a.provider, reason: a.reason })),
         }),
       );
     } catch (err) {
@@ -292,7 +292,7 @@ export function createCapabilityRouter(
           provider: outcome.provider,
           traceId: tid,
           latencyMs: Date.now() - start,
-          attemptedProviders: outcome.attempts,
+          attemptedProviders: outcome.attempts.map((a: { provider: string; reason: string }) => ({ name: a.provider, reason: a.reason })),
         }),
       );
     } catch (err) {

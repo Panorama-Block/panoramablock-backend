@@ -66,13 +66,13 @@ export class AgentCapabilityService {
     const outcome = await fallbackInvoke({
       ranked,
       supportsRoute: async (p) => p.capabilities.chat,
-      invoke: (p) => p.chat(request) as Promise<ChatResponseData>,
+      invoke: (p) => p.chat(request),
       capability: "agent",
     });
 
-    if (!outcome.ok) return buildError({ error: outcome.error, traceId, latencyMs: Date.now() - start, attemptedProviders: outcome.attempts });
+    if (!outcome.ok) return buildError({ error: outcome.error, traceId, latencyMs: Date.now() - start, attemptedProviders: outcome.attempts.map(a => ({ name: a.provider, reason: a.reason })) });
 
-    const response = outcome.result as CapabilityResponse<ChatResponseData>;
+    const response = outcome.result;
 
     if (response.status === "success") {
       await this.conversations.appendMessage({
@@ -192,12 +192,12 @@ export class AgentCapabilityService {
     const outcome = await fallbackInvoke({
       ranked,
       supportsRoute: async (p) => p.capabilities.transcription,
-      invoke: (p) => p.transcribe(request) as Promise<TranscriptionResult>,
+      invoke: (p) => p.transcribe(request),
       capability: "agent",
     });
 
     if (!outcome.ok) return buildError({ error: outcome.error, traceId, latencyMs: Date.now() - start });
-    return outcome.result as CapabilityResponse<TranscriptionResult>;
+    return outcome.result;
   }
 
   // -------------------------------------------------------------------------------------------------

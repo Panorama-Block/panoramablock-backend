@@ -3,7 +3,6 @@
     "target": "ES2020",
     "module": "commonjs",
     "outDir": "./dist",
-    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -15,5 +14,12 @@
     }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "../shared/capability/node_modules",
+    "../shared/capability/__tests__",
+    "../shared/capability/chains/__tests__",
+    "../shared/capability/http/__tests__"
+  ]
 } 
