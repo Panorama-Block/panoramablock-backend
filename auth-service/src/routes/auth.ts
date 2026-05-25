@@ -168,8 +168,18 @@ function telegramLinkKey(telegramUserId: string) {
   return `${TELEGRAM_LINK_KEY_PREFIX}${telegramUserId}`;
 }
 
+const SUNSET_DATE = process.env.AUTH_LEGACY_SUNSET_DATE ?? 'Sat, 30 Aug 2025 00:00:00 GMT';
+
 export default function authRoutes(redisClient: RedisClientType) {
   const router = Router();
+
+  // Mark all /auth/* routes as deprecated — successor routes are under /v1/capability/auth/*
+  router.use((_req, res, next) => {
+    res.setHeader('Deprecation', 'true');
+    res.setHeader('Sunset', SUNSET_DATE);
+    res.setHeader('Link', '</v1/capability/auth>; rel="successor-version"');
+    next();
+  });
 
   router.post('/telegram/link', async (req: Request, res: Response) => {
     try {

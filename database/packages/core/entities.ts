@@ -1072,6 +1072,10 @@ const entityConfigs: EntityConfig[] = [
         errorMessage: z.string().optional(),
         // Bridge
         bridgeId: z.string().optional(),
+        // Capability envelope
+        capability: z.enum(['swap', 'bridge', 'stake', 'lend', 'dca', 'liquidity']).optional(),
+        traceId: z.string().uuid().optional(),
+        envelope: jsonRecord.optional(),
         // Meta
         metadata: jsonRecord.optional(),
         tenantId: z.string(),
@@ -1110,6 +1114,9 @@ const entityConfigs: EntityConfig[] = [
         errorMessage: z.string().optional(),
         // Bridge
         bridgeId: z.string().optional(),
+        // Capability envelope
+        capability: z.enum(['swap', 'bridge', 'stake', 'lend', 'dca', 'liquidity']).optional(),
+        envelope: jsonRecord.optional(),
         // Meta
         metadata: jsonRecord.optional(),
         updatedAt: isoDate.optional(),

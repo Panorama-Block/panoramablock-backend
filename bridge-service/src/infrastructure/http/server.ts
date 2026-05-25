@@ -12,6 +12,7 @@ import { logger } from '../utils/logger';
 import { createHealthRoutes } from '../http/routes/healthRoutes';
 import { createTonBridgeRoutes } from '../http/routes/tonBridgeRoutes';
 import { createPanoramaV1Routes } from '../http/routes/panoramaV1Routes';
+import { createCapabilityRouter } from '../http/routes/capability.router';
 
 // Middleware
 import { errorHandlingMiddleware } from '../http/middleware/errorHandlingMiddleware';
@@ -91,14 +92,18 @@ export async function createHttpServer(app: Application, container: DIContainer)
   // Health check route (no authentication required)
   app.use('/health', createHealthRoutes(container));
 
-  // TON Bridge routes
-  // Note: Authorization middleware removed for simplicity as auth service is not part of this scope, 
-  // or should be re-added if needed. Assuming public access or handled by gateway for now.
-  // If auth is needed, we need to keep authenticationMiddleware and authorizationMiddleware.
-  // But those might depend on legacy services.
-  // I will assume public for now or add basic auth if requested.
-  // The prompt didn't specify auth requirements for the new endpoint.
-  app.use('/api/bridge', createTonBridgeRoutes(container));
+  // Legacy bridge routes — kept for backward compatibility.
+  // Deprecated: use /v1/capability/bridge/* instead.
+  app.use('/api/bridge', (req, _res, next) => {
+    _res.setHeader('Deprecation', 'true');
+    _res.setHeader('Sunset', 'Sat, 31 Dec 2025 23:59:59 GMT');
+    _res.setHeader('Link', '</v1/capability/bridge>; rel="successor-version"');
+    next();
+  }, createTonBridgeRoutes(container));
+
+  // Capability routes — new standard surface
+  app.use('/v1/capability', createCapabilityRouter(container.bridgeCapabilityService, [container.layerswapBridgeAdapter]));
+
   app.use('/v1', panoramaAuthMiddleware(securityConfig.jwt), createPanoramaV1Routes(container));
 
   // API root endpoint

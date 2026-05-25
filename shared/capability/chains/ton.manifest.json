@@ -1,0 +1,14 @@
+{
+  "id": 607,
+  "slug": "ton",
+  "name": "TON",
+  "nativeAsset": {
+    "symbol": "TON",
+    "decimals": 9
+  },
+  "rpcDefaults": [
+    "https://toncenter.com/api/v2/jsonRPC"
+  ],
+  "blockExplorerUrl": "https://tonscan.org",
+  "capabilitiesSupported": ["bridge"]
+}

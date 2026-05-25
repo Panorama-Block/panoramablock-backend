@@ -1,0 +1,16 @@
+{
+  "id": 42161,
+  "slug": "arbitrum",
+  "name": "Arbitrum One",
+  "nativeAsset": {
+    "symbol": "ETH",
+    "decimals": 18
+  },
+  "rpcDefaults": [
+    "https://arb1.arbitrum.io/rpc",
+    "https://arbitrum.publicnode.com",
+    "https://arbitrum-one-rpc.publicnode.com"
+  ],
+  "blockExplorerUrl": "https://arbiscan.io",
+  "capabilitiesSupported": ["swap", "bridge"]
+}

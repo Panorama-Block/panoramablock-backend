@@ -556,6 +556,11 @@ model Transaction {
   // Bridge específico
   bridgeId         String?  // ID externo do bridge (ex: Layerswap swapId)
 
+  // Capability envelope (sprint capability-first)
+  capability       String?  // swap | bridge | stake | lend | dca | liquidity
+  traceId          String?  // UUID para correlação de logs
+  envelope         Json?    // CapabilityResponse completo para auditoria
+
   // Metadados
   metadata         Json?    // Dados extras
   tenantId         String

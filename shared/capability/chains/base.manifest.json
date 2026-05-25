@@ -12,5 +12,5 @@
     "https://base-rpc.publicnode.com"
   ],
   "blockExplorerUrl": "https://basescan.org",
-  "capabilitiesSupported": ["swap", "lending", "liquidity"]
+  "capabilitiesSupported": ["swap", "lending", "liquidity", "bridge"]
 }
