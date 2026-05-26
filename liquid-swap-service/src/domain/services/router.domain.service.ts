@@ -24,7 +24,7 @@ export class RouterDomainService {
       "42161": ["uniswap-trading-api", "uniswap", "thirdweb"],
       "10": ["uniswap-trading-api", "uniswap", "thirdweb"],
       "137": ["uniswap-trading-api", "uniswap", "thirdweb"],
-      "43114": ["uniswap-trading-api", "uniswap", "thirdweb"],
+      "43114": ["traderjoe", "uniswap-trading-api", "uniswap", "thirdweb"],
       "default-cross-chain": ["thirdweb", "uniswap-trading-api", "uniswap"],
     })
   ) {

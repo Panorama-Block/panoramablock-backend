@@ -17,6 +17,8 @@ import {
   LiquidityCapabilityService,
 } from '../../application/services/liquidity.capability.service';
 import type { ILiquidityProvider } from '../../domain/ports/liquidity.provider.port';
+import { AerodromeLpAdapter } from '../adapters/aerodrome-lp.provider.adapter';
+import { TraderJoeLpStubAdapter } from '../adapters/traderjoe-lp.provider.adapter';
 
 export interface LiquidityContainer {
   facade: LiquidityCapabilityService;
@@ -39,11 +41,17 @@ export function buildLiquidityContainer(
 ): LiquidityContainer {
   const registry = new ProviderRegistry<ILiquidityProvider>();
 
-  for (const p of options.providers ?? []) {
-    registry.register(p);
+  if (options.providers) {
+    for (const p of options.providers) registry.register(p);
+  } else {
+    registry.register(new AerodromeLpAdapter());
+    registry.register(new TraderJoeLpStubAdapter());
   }
 
-  const policy = new ChainAssetPriorityPolicy(options.policy ?? {});
+  const policy = new ChainAssetPriorityPolicy(options.policy ?? {
+    '8453': ['aerodrome-lp'],
+    '43114': ['traderjoe-lp'],
+  });
 
   const facade = new LiquidityCapabilityService({ registry, policy });
 

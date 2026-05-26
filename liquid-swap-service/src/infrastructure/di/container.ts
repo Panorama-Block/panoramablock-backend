@@ -14,6 +14,7 @@ import { ThirdwebProviderAdapter } from "../adapters/thirdweb.provider.adapter";
 import { UniswapTradingApiAdapter } from "../adapters/uniswap.tradingapi.adapter";
 import { UniswapSmartRouterAdapter } from "../adapters/uniswap.smartrouter.adapter";
 import { AerodromeProviderAdapter } from "../adapters/aerodrome.provider.adapter";
+import { TraderJoeProviderAdapter } from "../adapters/traderjoe.provider.adapter";
 import { ChainProviderAdapter } from "../adapters/chain.provider.adapter";
 import { SwapRepositoryAdapter } from "../adapters/swap.repository.adapter";
 import { SwapController } from "../http/controllers/swap.controller";
@@ -30,6 +31,7 @@ export class DIContainer {
   private readonly _uniswapTradingApi: UniswapTradingApiAdapter;
   private readonly _uniswapSmartRouter: UniswapSmartRouterAdapter;
   private readonly _aerodromeProvider: AerodromeProviderAdapter;
+  private readonly _traderJoeProvider: TraderJoeProviderAdapter;
   private readonly _thirdwebProvider: ThirdwebProviderAdapter;
   private readonly _thirdwebSwapAdapter: ThirdwebSwapAdapter;
   private readonly _chainProviderAdapter: ChainProviderAdapter;
@@ -56,7 +58,8 @@ export class DIContainer {
     // Initialize infrastructure adapters
     this._uniswapTradingApi = new UniswapTradingApiAdapter(); // Priority 1: Trading API REST
     this._uniswapSmartRouter = new UniswapSmartRouterAdapter(); // Priority 2: Smart Router SDK (Fallback)
-    this._aerodromeProvider = new AerodromeProviderAdapter(); // Priority 3: Aerodrome on Base
+    this._aerodromeProvider = new AerodromeProviderAdapter();
+    this._traderJoeProvider = new TraderJoeProviderAdapter();
     this._thirdwebProvider = new ThirdwebProviderAdapter();
     this._thirdwebSwapAdapter = new ThirdwebSwapAdapter(); // Legacy
     this._chainProviderAdapter = new ChainProviderAdapter();
@@ -66,6 +69,7 @@ export class DIContainer {
     this._registry.register(this._uniswapTradingApi);
     this._registry.register(this._uniswapSmartRouter);
     this._registry.register(this._aerodromeProvider);
+    this._registry.register(this._traderJoeProvider);
     this._registry.register(this._thirdwebProvider);
 
     this._routerDomainService = new RouterDomainService(this._registry);

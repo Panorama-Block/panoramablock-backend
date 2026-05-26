@@ -7,9 +7,10 @@ import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 
 import { createApp } from '../app';
+import { buildLiquidityContainer } from '../infrastructure/di/container';
 
 describe('liquidity-service smoke', () => {
-  const app = createApp();
+  const app = createApp({ liquidityContainer: buildLiquidityContainer({ providers: [] }) });
 
   it('GET /health returns 200 with service metadata', async () => {
     const res = await request(app).get('/health');
