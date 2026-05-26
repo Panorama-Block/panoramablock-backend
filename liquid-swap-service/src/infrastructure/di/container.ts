@@ -26,11 +26,12 @@ export class DIContainer {
   private static instance: DIContainer;
 
   // Infrastructure - Swap Providers
-  private readonly _uniswapTradingApi: UniswapTradingApiAdapter; // Trading API REST (Priority 1)
-  private readonly _uniswapSmartRouter: UniswapSmartRouterAdapter; // Smart Order Router SDK (Priority 2 - Fallback)
-  private readonly _aerodromeProvider: AerodromeProviderAdapter; // Aerodrome on Base (Priority 3)
+  private readonly _registry: ProviderRegistry<ISwapProvider>;
+  private readonly _uniswapTradingApi: UniswapTradingApiAdapter;
+  private readonly _uniswapSmartRouter: UniswapSmartRouterAdapter;
+  private readonly _aerodromeProvider: AerodromeProviderAdapter;
   private readonly _thirdwebProvider: ThirdwebProviderAdapter;
-  private readonly _thirdwebSwapAdapter: ThirdwebSwapAdapter; // Legacy adapter for backwards compatibility
+  private readonly _thirdwebSwapAdapter: ThirdwebSwapAdapter;
   private readonly _chainProviderAdapter: ChainProviderAdapter;
   private readonly _swapRepositoryAdapter: SwapRepositoryAdapter;
 
@@ -61,14 +62,13 @@ export class DIContainer {
     this._chainProviderAdapter = new ChainProviderAdapter();
     this._swapRepositoryAdapter = new SwapRepositoryAdapter();
 
-    const registry = new ProviderRegistry<ISwapProvider>();
-    registry.register(this._uniswapTradingApi);   // enabled
-    registry.register(this._uniswapSmartRouter);  // metadata.enabled = false (kept as registered stub)
-    registry.register(this._aerodromeProvider);   // Base only
-    registry.register(this._thirdwebProvider);    // cross-chain fallback
+    this._registry = new ProviderRegistry<ISwapProvider>();
+    this._registry.register(this._uniswapTradingApi);
+    this._registry.register(this._uniswapSmartRouter);
+    this._registry.register(this._aerodromeProvider);
+    this._registry.register(this._thirdwebProvider);
 
-    // Initialize domain services
-    this._routerDomainService = new RouterDomainService(registry);
+    this._routerDomainService = new RouterDomainService(this._registry);
     this._swapDomainService = new SwapDomainService(
       this._thirdwebSwapAdapter, // Keep for backwards compatibility
       this._chainProviderAdapter,
@@ -165,5 +165,9 @@ export class DIContainer {
 
   public get routerDomainService(): RouterDomainService {
     return this._routerDomainService;
+  }
+
+  public get swapRegistry(): ProviderRegistry<ISwapProvider> {
+    return this._registry;
   }
 }

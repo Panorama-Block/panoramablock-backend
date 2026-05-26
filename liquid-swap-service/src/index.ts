@@ -16,6 +16,7 @@ import type {
 } from "express-serve-static-core";
 import cors from "cors";
 import { swapRouter } from "./infrastructure/http/routes/swap.routes";
+import { buildSwapCapabilityRouter } from "./infrastructure/http/routes/swap.capability.routes";
 import { verifyJwtMiddleware } from "./middleware/authMiddleware";
 import { requestContextMiddleware } from "./infrastructure/http/middlewares/request-context.middleware";
 import { createErrorResponder } from "./infrastructure/http/middlewares/error.responder";
@@ -105,16 +106,28 @@ try {
     console.log("[Liquid Swap Service] 🔍 Debug endpoint enabled: /debug/compare-providers");
   }
 
-  // /swap/quote is a read-only price-fetch — no auth required (smartAccountAddress in body is sufficient)
-  // /swap/tx and /swap/status require auth to prevent abuse and tie history to the user
+  // Capability namespace (new)
   const di = DIContainer.getInstance();
-  app.post("/swap/quote", di.swapController.getQuote);
-  app.use("/swap", verifyJwtMiddleware, swapRouter);
+  app.use(
+    "/v1/capability/swap",
+    buildSwapCapabilityRouter({
+      registry: di.swapRegistry,
+      selector: di.providerSelectorService,
+    })
+  );
 
-  // Back-compat aliases (some older clients call these without the /swap prefix).
-  app.post("/quote", di.swapController.getQuote);          // no auth — read-only
-  app.post("/tx", verifyJwtMiddleware, di.swapController.getPreparedTx);
-  app.post("/prepare", verifyJwtMiddleware, di.swapController.getPreparedTx);
+  // Legacy routes — deprecation headers signal clients to migrate to /v1/capability/swap/*
+  const deprecationMiddleware = (_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader("Deprecation", "true");
+    res.setHeader("Link", '</v1/capability/swap>; rel="successor-version"');
+    next();
+  };
+
+  app.post("/swap/quote", deprecationMiddleware, di.swapController.getQuote);
+  app.use("/swap", deprecationMiddleware, verifyJwtMiddleware, swapRouter);
+  app.post("/quote", deprecationMiddleware, di.swapController.getQuote);
+  app.post("/tx", deprecationMiddleware, verifyJwtMiddleware, di.swapController.getPreparedTx);
+  app.post("/prepare", deprecationMiddleware, verifyJwtMiddleware, di.swapController.getPreparedTx);
 
   // Health check
   app.get("/health", (_req: Request, res: Response) => {
