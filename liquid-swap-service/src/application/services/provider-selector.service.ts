@@ -5,8 +5,6 @@ import { SwapRequest, SwapQuote } from "../../domain/entities/swap";
 import { SwapError } from "../../domain/entities/errors";
 import { PreparedSwap } from "../../domain/ports/swap.provider.port";
 
-const BASE_CHAIN_ID = 8453;
-
 const PROVIDER_ALIAS_PRIORITY: Record<string, string[]> = {
   uniswap: ["uniswap-trading-api"],
 };
@@ -175,70 +173,10 @@ export class ProviderSelectorService {
       );
     }
 
-    // Case 2: Auto-select best provider with automatic fallback
-    const isSameChain = request.fromChainId === request.toChainId;
-    const isBase = request.fromChainId === BASE_CHAIN_ID;
-
-    // Prioridade espelha o RouterDomainService:
-    //   Base same-chain  → Execution Layer (aerodrome) > Uniswap > Thirdweb
-    //   Outro same-chain → Uniswap > Thirdweb
-    //   Cross-chain      → Thirdweb > Uniswap
-    let providerPriority: string[];
-    if (isSameChain && isBase) {
-      providerPriority = ["aerodrome", "uniswap-trading-api", "uniswap", "thirdweb"];
-      console.log(`[📋 SELECTOR] [PREPARE] Auto-select — Base same-chain → prioridade: ${providerPriority.join(" > ")}`);
-    } else if (isSameChain) {
-      providerPriority = ["uniswap-trading-api", "uniswap", "thirdweb"];
-      console.log(`[📋 SELECTOR] [PREPARE] Auto-select — same-chain (chain ${request.fromChainId}) → prioridade: ${providerPriority.join(" > ")}`);
-    } else {
-      providerPriority = ["thirdweb", "uniswap-trading-api", "uniswap"];
-      console.log(`[📋 SELECTOR] [PREPARE] Auto-select — cross-chain → prioridade: ${providerPriority.join(" > ")}`);
-    }
-
-    const errors: string[] = [];
-    let lastSwapError: SwapError | null = null;
-
-    for (const providerName of providerPriority) {
-      const provider = this.router.getProviderByName(providerName);
-      if (!provider) {
-        continue;
-      }
-
-      try {
-        const supports = await provider.supportsRoute({
-          fromChainId: request.fromChainId,
-          toChainId: request.toChainId,
-          fromToken: request.fromToken,
-          toToken: request.toToken,
-        });
-
-        if (!supports) {
-          console.log(`[📋 SELECTOR] [PREPARE] "${providerName}" não suporta este par — pulando`);
-          continue;
-        }
-      } catch (error) {
-        console.warn(`[📋 SELECTOR] [PREPARE] Erro ao verificar suporte de "${providerName}": ${(error as Error).message}`);
-        errors.push(`${providerName}: ${(error as Error).message}`);
-        if (error instanceof SwapError) lastSwapError = error;
-        continue;
-      }
-
-      try {
-        console.log(`[📋 SELECTOR] [PREPARE] 🚀 Preparando swap com "${providerName}"`);
-        const prepared = await provider.prepareSwap(request);
-        console.log(`[📋 SELECTOR] [PREPARE] ✅ Prepare concluído com "${providerName}"`);
-        return { provider: provider.name, prepared };
-      } catch (error) {
-        console.warn(`[📋 SELECTOR] [PREPARE] ⚠️ "${providerName}" falhou no prepare: ${(error as Error).message}`);
-        errors.push(`${providerName}: ${(error as Error).message}`);
-        if (error instanceof SwapError) lastSwapError = error;
-      }
-    }
-
-    if (lastSwapError) throw lastSwapError;
-
-    const detail = errors.length ? `Motivos: ${errors.join("; ")}` : "Nenhum provider disponível";
-    throw new Error(`Prepare falhou em todos os providers. ${detail}`);
+    // Case 2: Auto-select best provider — delegates ranking to the policy
+    const selected = await this.router.selectBestProviderWithoutQuote(request);
+    const prepared = await selected.prepareSwap(request);
+    return { provider: selected.name, prepared };
   }
 
   /**
