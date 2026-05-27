@@ -1,0 +1,9 @@
+{
+  "name": "@panorama/execution-planning",
+  "version": "0.1.0",
+  "private": true,
+  "devDependencies": {
+    "typescript": "^5.2.2",
+    "vitest": "^3.2.4"
+  }
+}
