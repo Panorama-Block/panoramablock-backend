@@ -41,7 +41,7 @@ export class ThirdwebAuthAdapter implements IAuthProvider {
       version: '1',
     });
     const expiresAt: string = (payload as any).expiresAt ?? new Date(Date.now() + 600_000).toISOString();
-    return { payload, expiresAt };
+    return { walletType: 'evm', payload: payload as any, expiresAt };
   }
 
   async verify(payload: unknown, signature: string): Promise<VerifyResult> {
@@ -55,7 +55,7 @@ export class ThirdwebAuthAdapter implements IAuthProvider {
       address = await this.auth.verify({ payload: p, signature }, { domain: this.domain });
     }
     const token: string = await this.auth.generate({ payload: p, signature }, { domain: this.domain });
-    return { token, address };
+    return { token, address, walletType: 'evm' };
   }
 
   async validateToken(token: string): Promise<unknown> {

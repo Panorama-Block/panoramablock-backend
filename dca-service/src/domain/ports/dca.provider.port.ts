@@ -144,9 +144,16 @@ export interface GetHistoryResult {
   vaultHistory: unknown[];
 }
 
-export interface TransactionResult {
+export interface ScheduledExecutionResult {
   transactionHash: string;
+  chainId: number;
+  status: 'submitted' | 'confirmed' | 'failed';
+  executedAt: string;
+  strategyId?: string;
+  gasUsed?: string;
 }
+
+export type TransactionResult = ScheduledExecutionResult;
 
 export interface ValidationResult {
   valid: boolean;

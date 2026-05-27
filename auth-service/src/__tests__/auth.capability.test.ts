@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { ProviderRegistry, type ProviderMetadata, type ProviderHealth } from '@panorama/capability';
-import type { IAuthProvider, LoginChallenge, VerifyResult } from '../domain/ports/auth.provider.port';
+import type { IAuthProvider, LoginChallenge, VerifyResult, WalletType } from '../domain/ports/auth.provider.port';
 
 class FakeAuthProvider implements IAuthProvider {
   public readonly metadata: ProviderMetadata;
@@ -20,10 +20,14 @@ class FakeAuthProvider implements IAuthProvider {
     };
   }
   async login(address: string): Promise<LoginChallenge> {
-    return { payload: { address, nonce: 'test' }, expiresAt: new Date(Date.now() + 300000).toISOString() };
+    return {
+      walletType: 'evm',
+      payload: { address, nonce: 'test', domain: 'test', statement: '', version: '1', issuedAt: new Date().toISOString(), expirationTime: new Date(Date.now() + 300000).toISOString() },
+      expiresAt: new Date(Date.now() + 300000).toISOString(),
+    };
   }
   async verify(_payload: unknown, _signature: string): Promise<VerifyResult> {
-    return { token: 'jwt-test', address: '0x1234' };
+    return { token: 'jwt-test', address: '0x1234', walletType: 'evm' };
   }
   supportsRoute(route: string): boolean {
     return route === this.route;
@@ -47,11 +51,18 @@ describe('auth provider conformance', () => {
     expect(() => reg.register(new FakeAuthProvider('dup'))).toThrow();
   });
 
-  it('login returns a challenge with expiry', async () => {
+  it('login returns a challenge with walletType and expiry', async () => {
     const p = new FakeAuthProvider('test-auth');
     const challenge = await p.login('0xabc');
+    expect(challenge.walletType).toBe('evm');
     expect(challenge.payload).toBeDefined();
     expect(challenge.expiresAt).toBeDefined();
+  });
+
+  it('verify returns walletType in result', async () => {
+    const p = new FakeAuthProvider('test-auth');
+    const result = await p.verify({}, '0xsig');
+    expect(result.walletType).toBe('evm');
   });
 
   it('verify returns token and address', async () => {

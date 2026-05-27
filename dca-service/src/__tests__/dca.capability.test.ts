@@ -3,7 +3,12 @@
  */
 import { describe, it, expect } from 'vitest';
 import { ProviderRegistry, type ProviderMetadata, type ProviderHealth } from '@panorama/capability';
-import type { IDCAProvider, SmartAccount, DCAStrategyRecord, CreateAccountReq, CreateStrategyReq, ExecuteStrategyReq } from '../domain/ports/dca.provider.port';
+import type {
+  IDCAProvider, SmartAccount, DCAStrategyRecord,
+  CreateAccountReq, CreateStrategyReq, CreateAccountResult, CreateStrategyResult,
+  GetStrategiesResult, GetHistoryResult, SignAndExecuteReq,
+  TransactionResult, ValidatePermissionsReq, ValidationResult, WithdrawReq, SupportsRouteParams,
+} from '../domain/ports/dca.provider.port';
 
 class FakeDCAProvider implements IDCAProvider {
   public readonly metadata: ProviderMetadata;
@@ -22,29 +27,26 @@ class FakeDCAProvider implements IDCAProvider {
   async healthCheck(): Promise<ProviderHealth> {
     return { healthy: true, checkedAt: new Date().toISOString() };
   }
-  async createSmartAccount(req: CreateAccountReq): Promise<SmartAccount> {
-    return {
-      address: '0xSA', userId: req.userId, name: req.name,
-      createdAt: Date.now(), sessionKeyAddress: '0xSK',
-      expiresAt: Date.now() + 86400000,
-      permissions: { approvedTargets: [], nativeTokenLimitPerTransaction: '0', startTimestamp: 0, endTimestamp: 0 },
-    };
+  async createAccount(req: CreateAccountReq): Promise<CreateAccountResult> {
+    return { smartAccountAddress: '0xSA', sessionKeyAddress: '0xSK', expiresAt: new Date(Date.now() + 86400000) };
   }
-  async getSmartAccounts(_userId: string): Promise<SmartAccount[]> { return []; }
-  async createStrategy(_req: CreateStrategyReq): Promise<DCAStrategyRecord> {
-    return {
-      strategyId: 'strat-1', smartAccountId: 'sa-1',
-      fromToken: '0xA', toToken: '0xB', fromChainId: 8453, toChainId: 8453,
-      amount: '100', interval: 'daily',
-      lastExecuted: 0, nextExecution: Date.now() + 86400000, isActive: true,
-    };
+  async getAccount(_address: string): Promise<SmartAccount | null> { return null; }
+  async getUserAccounts(_userId: string): Promise<SmartAccount[]> { return []; }
+  async createStrategy(_req: CreateStrategyReq): Promise<CreateStrategyResult> {
+    return { type: 'created', strategyId: 'strat-1', nextExecution: new Date(Date.now() + 86400000) };
   }
-  async getStrategies(_userId: string): Promise<DCAStrategyRecord[]> { return []; }
-  async cancelStrategy(_strategyId: string): Promise<void> {}
-  async executeStrategy(_req: ExecuteStrategyReq): Promise<{ txHash: string }> {
-    return { txHash: '0xtx' };
+  async getStrategies(_smartAccountId: string): Promise<GetStrategiesResult> { return { strategies: [], vaultOrders: [] }; }
+  async toggleStrategy(_id: string, _active: boolean): Promise<void> {}
+  async deleteStrategy(_id: string): Promise<void> {}
+  async getHistory(_smartAccountId: string): Promise<GetHistoryResult> { return { history: [], vaultHistory: [] }; }
+  async signAndExecute(_req: SignAndExecuteReq): Promise<TransactionResult> {
+    return { transactionHash: '0xtx', chainId: 8453, status: 'submitted', executedAt: new Date().toISOString() };
   }
-  async getExecutionHistory(_strategyId: string) { return []; }
+  async validatePermissions(_req: ValidatePermissionsReq): Promise<ValidationResult> { return { valid: true }; }
+  async withdraw(_req: WithdrawReq): Promise<TransactionResult> {
+    return { transactionHash: '0xtx', chainId: 8453, status: 'submitted', executedAt: new Date().toISOString() };
+  }
+  async supportsRoute(_params: SupportsRouteParams): Promise<boolean> { return true; }
 }
 
 describe('dca/automation provider conformance', () => {
@@ -68,21 +70,30 @@ describe('dca/automation provider conformance', () => {
     expect(reg.listByChain(8453).map(p => p.name)).toEqual(['base-dca']);
   });
 
-  it('createSmartAccount returns valid account', async () => {
+  it('createAccount returns valid result', async () => {
     const p = new FakeDCAProvider('test-dca');
-    const account = await p.createSmartAccount({ userId: 'u1', name: 'test' });
-    expect(account.address).toBeDefined();
-    expect(account.sessionKeyAddress).toBeDefined();
+    const result = await p.createAccount({ userId: 'u1', name: 'test', permissions: { approvedTargets: [], nativeTokenLimit: '0', durationDays: 30 } });
+    expect(result.smartAccountAddress).toBeDefined();
+    expect(result.sessionKeyAddress).toBeDefined();
   });
 
-  it('createStrategy returns valid record', async () => {
+  it('createStrategy returns valid result', async () => {
     const p = new FakeDCAProvider('test-dca');
     const strategy = await p.createStrategy({
       smartAccountId: 'sa-1', fromToken: '0xA', toToken: '0xB',
       fromChainId: 8453, toChainId: 8453, amount: '100', interval: 'daily',
-    });
-    expect(strategy.strategyId).toBeDefined();
-    expect(strategy.isActive).toBe(true);
+    } as CreateStrategyReq);
+    expect(strategy.type).toBe('created');
+    if (strategy.type === 'created') expect(strategy.strategyId).toBeDefined();
+  });
+
+  it('signAndExecute returns ScheduledExecutionResult', async () => {
+    const p = new FakeDCAProvider('test-dca');
+    const result = await p.signAndExecute({ smartAccountAddress: '0xSA', userId: 'u1', to: '0x', value: '0', chainId: 8453 });
+    expect(result.transactionHash).toBeDefined();
+    expect(result.chainId).toBe(8453);
+    expect(result.status).toBe('submitted');
+    expect(result.executedAt).toBeDefined();
   });
 
   it('healthCheck returns healthy', async () => {

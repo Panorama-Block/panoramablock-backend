@@ -23,17 +23,29 @@ class FakeLendingProvider implements ILendingProvider {
     return { healthy: true, checkedAt: new Date().toISOString() };
   }
   async getMarkets(_chainId: number) {
-    return [{ asset: '0xUSDC', supplyApr: 3.5, borrowApr: 5.2, totalSupply: '1000000', totalBorrow: '500000' }];
+    return [{
+      chainId: 43114, protocol: 'benqi', qTokenAddress: '0xqUSDC', qTokenSymbol: 'qUSDC',
+      underlyingAddress: '0xUSDC', underlyingSymbol: 'USDC', underlyingDecimals: 6,
+      collateralFactorBps: 8000, supplyApyBps: 350, borrowApyBps: 520,
+    }];
   }
   async getPosition(_userAddress: string, _market: string) {
-    return { supplied: '100', borrowed: '0', healthFactor: 2.5 };
+    return {
+      chainId: 43114, protocol: 'benqi', qTokenAddress: '0xqUSDC', qTokenSymbol: 'qUSDC',
+      underlyingAddress: '0xUSDC', underlyingSymbol: 'USDC', underlyingDecimals: 6,
+      supplyBalanceUnderlying: '100', borrowBalanceUnderlying: '0',
+    };
   }
   async prepareSupply(_input: any) { return []; }
   async prepareBorrow(_input: any) { return []; }
   async prepareRepay(_input: any) { return []; }
   async prepareWithdraw(_input: any) { return []; }
   async getApr(_market: string, _chainId: number) { return { supplyApr: 3.5, borrowApr: 5.2 }; }
-  supportsRoute(params: any): boolean {
+  async getUserPosition(_addr: string, _chainId: number) {
+    return { accountAddress: '0x', liquidity: { totalCollateralUsd: 0, totalBorrowUsd: 0, availableBorrowUsd: 0 } as any, positions: [], updatedAt: Date.now() };
+  }
+  async getHistory(_addr: string, _chainId: number) { return []; }
+  async supportsRoute(params: any): Promise<boolean> {
     return this.metadata.supportedChains.includes(params.chainId);
   }
 }
@@ -64,13 +76,13 @@ describe('lending provider conformance', () => {
     const p = new FakeLendingProvider('test-lending');
     const markets = await p.getMarkets(43114);
     expect(markets.length).toBeGreaterThan(0);
-    expect(markets[0].supplyApr).toBeDefined();
+    expect(markets[0].supplyApyBps).toBeDefined();
   });
 
   it('getPosition returns user position', async () => {
     const p = new FakeLendingProvider('test-lending');
     const pos = await p.getPosition('0xuser', 'USDC');
-    expect(pos.healthFactor).toBeGreaterThan(0);
+    expect(pos.supplyBalanceUnderlying).toBeDefined();
   });
 
   it('healthCheck returns healthy', async () => {

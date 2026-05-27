@@ -238,7 +238,12 @@ export class ERC4337DCAAdapter implements IDCAProvider {
       if (!result.success) {
         throw new Error(result.error || 'Transaction failed');
       }
-      return { transactionHash: result.transactionHash };
+      return {
+        transactionHash: result.transactionHash,
+        chainId: req.chainId ?? 8453,
+        status: 'submitted' as const,
+        executedAt: new Date().toISOString(),
+      };
     } catch (err) {
       if (CapabilityError.is(err)) throw err;
       throw CapabilityError.providerFailure({
@@ -309,7 +314,12 @@ export class ERC4337DCAAdapter implements IDCAProvider {
       });
 
       const result = await sendTransaction({ transaction, account: smartAccount });
-      return { transactionHash: result.transactionHash };
+      return {
+        transactionHash: result.transactionHash,
+        chainId: req.chainId ?? 8453,
+        status: 'submitted' as const,
+        executedAt: new Date().toISOString(),
+      };
     } catch (err) {
       if (CapabilityError.is(err)) throw err;
       throw CapabilityError.providerFailure({
