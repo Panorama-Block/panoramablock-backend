@@ -22,8 +22,8 @@
 
 | Package | Tests | Description |
 |---|---|---|
-| @panorama/capability | 202 | Registry, Policy, Health, Discovery, Errors, Envelope, Chains |
-| @panorama/execution-planning | 10 | Plan builder, validator, topological sort |
+| @panorama/capability (backend) | 202 | Registry, Policy, Health, Discovery, Errors, Envelope, Chains |
+| execution-planning (execution-layer) | 10 | Plan builder, validator, topological sort |
 
 ## Infrastructure
 
