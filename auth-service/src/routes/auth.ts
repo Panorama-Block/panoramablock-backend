@@ -358,10 +358,9 @@ export default function authRoutes(redisClient: RedisClientType) {
       };
 
       console.log('📤 [AUTH VERIFY] Sending response:', {
-        tokenLength: token.length,
-        address: address,
-        sessionId: sessionId,
-        tokenPreview: token.substring(0, 50) + '...',
+        tokenIssued: true,
+        address,
+        sessionId,
       });
 
       return res.json(response);
