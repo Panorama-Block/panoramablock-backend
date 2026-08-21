@@ -343,7 +343,7 @@ export default function authRoutes(redisClient: RedisClientType) {
         signature,
       };
 
-      console.log('💾 [AUTH VERIFY] Creating session in Redis:', sessionId);
+      console.log('💾 [AUTH VERIFY] Creating session in Redis');
       await redisClient.set(`session:${sessionId}`, JSON.stringify(sessionData), {
         EX: REFRESH_TTL_SECONDS,
       });
@@ -360,7 +360,7 @@ export default function authRoutes(redisClient: RedisClientType) {
       console.log('📤 [AUTH VERIFY] Sending response:', {
         tokenIssued: true,
         address,
-        sessionId,
+        sessionIssued: true,
       });
 
       return res.json(response);
@@ -511,22 +511,22 @@ export default function authRoutes(redisClient: RedisClientType) {
       console.log('✅ [AUTH VALIDATE] JWT token validated successfully');
 
       if (sessionId) {
-        console.log('💾 [AUTH VALIDATE] Checking session validity:', sessionId);
+        console.log('💾 [AUTH VALIDATE] Checking session validity');
         const sessionData = await redisClient.get(`session:${sessionId}`);
 
         if (!sessionData) {
-          console.log('❌ [AUTH VALIDATE] Session not found:', sessionId);
+          console.log('❌ [AUTH VALIDATE] Session not found');
           return res.status(401).json({ error: 'Session not found' });
         }
 
         const session = JSON.parse(sessionData);
 
         if (!session.isValid) {
-          console.log('❌ [AUTH VALIDATE] Session is invalid:', sessionId);
+          console.log('❌ [AUTH VALIDATE] Session is invalid');
           return res.status(401).json({ error: 'Session is invalid' });
         }
 
-        console.log('✅ [AUTH VALIDATE] Session is valid:', sessionId);
+        console.log('✅ [AUTH VALIDATE] Session is valid');
       }
 
       console.log('✅ [AUTH VALIDATE] Token validation successful');
@@ -553,7 +553,7 @@ export default function authRoutes(redisClient: RedisClientType) {
       }
 
       const { sessionId } = req.body;
-      console.log('📝 [AUTH LOGOUT] SessionId received:', sessionId);
+      console.log('📝 [AUTH LOGOUT] Session ID received:', Boolean(sessionId));
 
       const refreshSessionId = sessionId || parseRefreshCookie(req);
       if (!refreshSessionId) {
@@ -562,11 +562,11 @@ export default function authRoutes(redisClient: RedisClientType) {
         return res.status(400).json({ error: 'Session ID not provided' });
       }
 
-      console.log('💾 [AUTH LOGOUT] Checking session in Redis:', refreshSessionId);
+      console.log('💾 [AUTH LOGOUT] Checking session in Redis');
       const sessionData = await redisClient.get(`session:${refreshSessionId}`);
 
       if (!sessionData) {
-        console.log('❌ [AUTH LOGOUT] Session not found:', refreshSessionId);
+        console.log('❌ [AUTH LOGOUT] Session not found');
         clearRefreshCookie(res);
         return res.status(404).json({ error: 'Session not found' });
       }
@@ -575,7 +575,7 @@ export default function authRoutes(redisClient: RedisClientType) {
   session.isValid = false;
   session.updatedAt = new Date().toISOString();
 
-  console.log('🔄 [AUTH LOGOUT] Invalidating session:', refreshSessionId);
+  console.log('🔄 [AUTH LOGOUT] Invalidating session');
       await redisClient.set(`session:${refreshSessionId}`, JSON.stringify(session), {
         KEEPTTL: true, // Keep the original TTL
       });
@@ -608,23 +608,23 @@ export default function authRoutes(redisClient: RedisClientType) {
         return res.status(401).json({ error: 'Refresh session not found' });
       }
 
-      console.log('💾 [AUTH REFRESH] Loading session from Redis:', existingSessionId);
+      console.log('💾 [AUTH REFRESH] Loading session from Redis');
       const sessionData = await redisClient.get(`session:${existingSessionId}`);
       if (!sessionData) {
-        console.log('❌ [AUTH REFRESH] Session not found:', existingSessionId);
+        console.log('❌ [AUTH REFRESH] Session not found');
         clearRefreshCookie(res);
         return res.status(401).json({ error: 'Session not found' });
       }
 
       const session = JSON.parse(sessionData);
       if (!session.isValid) {
-        console.log('❌ [AUTH REFRESH] Session invalid:', existingSessionId);
+        console.log('❌ [AUTH REFRESH] Session invalid');
         clearRefreshCookie(res);
         return res.status(401).json({ error: 'Session invalidated' });
       }
 
       if (!session.payload || !session.signature) {
-        console.log('❌ [AUTH REFRESH] Session missing payload/signature:', existingSessionId);
+        console.log('❌ [AUTH REFRESH] Session missing payload/signature');
         clearRefreshCookie(res);
         return res.status(401).json({ error: 'Session missing refresh data' });
       }
