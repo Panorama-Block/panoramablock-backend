@@ -14,7 +14,7 @@
   "dependencies": {
     "@thirdweb-dev/engine": "^3.2.1",
     "chai": "^4.3.10",
-    "axios": "^1.12.2",
+    "axios": "^1.18.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "ethers": "^5.7.2",
@@ -36,7 +36,15 @@
     "typescript": "^5.2.2"
   },
   "overrides": {
-    "chai": "^4.3.10"
+    "chai": "^4.3.10",
+    "axios": "$axios",
+    "@hey-api/json-schema-ref-parser": {
+      "js-yaml": "4.3.1"
+    },
+    "thirdweb": {
+      "viem": "2.55.19"
+    },
+    "ws@>=8.0.0 <8.21.0": "8.21.0"
   },
   "keywords": [
     "blockchain",
