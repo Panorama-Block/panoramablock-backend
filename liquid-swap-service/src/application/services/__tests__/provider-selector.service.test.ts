@@ -42,8 +42,8 @@ describe('ProviderSelectorService', () => {
   let mockProvider2: MockProvider;
 
   beforeEach(() => {
-    mockProvider1 = new MockProvider('provider1');
-    mockProvider2 = new MockProvider('provider2');
+    mockProvider1 = new MockProvider('uniswap');
+    mockProvider2 = new MockProvider('thirdweb');
 
     const providerMap = new Map<string, ISwapProvider>();
     providerMap.set(mockProvider1.name, mockProvider1);
@@ -86,7 +86,7 @@ describe('ProviderSelectorService', () => {
       const result = await selectorService.getQuoteWithBestProvider(request);
 
       expect(typeof result.provider).toBe('string');
-      expect(['provider1', 'provider2']).toContain(result.provider);
+      expect(['uniswap', 'thirdweb']).toContain(result.provider);
     });
 
     it('should return valid quote object', async () => {
@@ -122,9 +122,9 @@ describe('ProviderSelectorService', () => {
         '0x1234567890123456789012345678901234567890'
       );
 
-      const result = await selectorService.prepareSwapWithProvider(request, 'provider1');
+      const result = await selectorService.prepareSwapWithProvider(request, 'uniswap');
 
-      expect(result.provider).toBe('provider1');
+      expect(result.provider).toBe('uniswap');
       expect(result.prepared).toBeDefined();
       expect(result.prepared.transactions).toBeDefined();
       expect(Array.isArray(result.prepared.transactions)).toBe(true);
@@ -157,7 +157,7 @@ describe('ProviderSelectorService', () => {
         '0x1234567890123456789012345678901234567890'
       );
 
-      const result = await selectorService.prepareSwapWithProvider(request, 'provider1');
+      const result = await selectorService.prepareSwapWithProvider(request, 'uniswap');
 
       expect(result.prepared).toBeDefined();
       expect(result.prepared.estimatedDuration).toBeDefined();
@@ -237,7 +237,7 @@ describe('ProviderSelectorService', () => {
         '0x1234567890123456789012345678901234567890'
       );
 
-      await selectorService.prepareSwapWithProvider(request, 'provider1');
+      await selectorService.prepareSwapWithProvider(request, 'uniswap');
 
       expect(prepareSwapSpy).toHaveBeenCalledWith(request);
     });
