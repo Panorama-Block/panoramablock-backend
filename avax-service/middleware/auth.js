@@ -12,8 +12,8 @@ function verifySignature(req, res, next) {
     // Debug logs para frontend
     console.log('🔍 Debug verifySignature (Frontend):');
     console.log('   Address:', address);
-    console.log('   Signature:', signature);
-    console.log('   Message:', message);
+    console.log('   Signature:', signature ? '[PRESENT]' : '[NOT PRESENT]');
+    console.log('   Message:', message ? '[PRESENT]' : '[NOT PRESENT]');
     console.log('   Timestamp:', timestamp);
     console.log('   isSmartWallet:', isSmartWallet);
     console.log('   walletType:', walletType);

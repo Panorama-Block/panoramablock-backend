@@ -43,7 +43,7 @@ export class AuthMiddleware {
       }
 
       const token = authHeader.split(' ')[1];
-      AuthMiddleware.logger.info(`✅ [Lido Service] Token extracted: ${token.substring(0, 20)}...`);
+      AuthMiddleware.logger.info('✅ [Lido Service] Bearer token extracted');
 
       // Validate token with centralized Auth Service
       try {
