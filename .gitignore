@@ -32,7 +32,6 @@ test.js
 
 # Arquivos do Windows
 *.lnk
-liquid-swap-service/package-lock.json
 *./package-lock.json
 # Temporary token registry copy for builds
 liquid-swap-service/shared/token-registry.json
