@@ -84,28 +84,93 @@ jobs:
           echo "Latest revision did not become ready in time."
           exit 1
 
-      - name: Smoke test health endpoint
+      - name: Validate deployed service health
         run: |
           set -euo pipefail
-          FQDN="$(az containerapp show --name "$APP_NAME" --resource-group "$RG" --query properties.configuration.ingress.fqdn -o tsv)"
-          if [ -z "${FQDN:-}" ]; then
-            echo "Could not resolve ${APP_NAME} FQDN"
+
+          EXTERNAL="$(az containerapp show \
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --query properties.configuration.ingress.external \
+            -o tsv)"
+
+          if [ "$EXTERNAL" = "true" ] || [ "$EXTERNAL" = "True" ]; then
+            FQDN="$(az containerapp show \
+              --name "$APP_NAME" \
+              --resource-group "$RG" \
+              --query properties.configuration.ingress.fqdn \
+              -o tsv)"
+
+            if [ -z "${FQDN:-}" ]; then
+              echo "Could not resolve ${APP_NAME} FQDN"
+              exit 1
+            fi
+
+            URL="https://${FQDN}/health"
+
+            for attempt in 1 2 3 4 5; do
+              status="$(curl -sS -L --max-time 30 -o /tmp/health_body.txt -w '%{http_code}' "$URL" || true)"
+              echo "HEALTH_STATUS=${status}"
+              cat /tmp/health_body.txt || true
+
+              if [ "$status" = "200" ]; then
+                echo "External health smoke test passed."
+                exit 0
+              fi
+
+              sleep 15
+            done
+
+            echo "External health smoke test failed."
             exit 1
           fi
 
-          URL="https://${FQDN}/health"
-          for attempt in 1 2 3 4 5; do
-            status="$(curl -sS -L --max-time 30 -o /tmp/health_body.txt -w '%{http_code}' "$URL" || true)"
-            echo "HEALTH_STATUS=${status}"
-            cat /tmp/health_body.txt || true
+          echo "${APP_NAME} uses internal ingress; validating Azure runtime state."
 
-            if [ "$status" = "200" ]; then
-              echo "Health smoke test passed."
-              exit 0
-            fi
+          APP_STATE="$(az containerapp show \
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --query properties.runningStatus \
+            -o tsv)"
 
-            sleep 15
-          done
+          LATEST_REVISION="$(az containerapp show \
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --query properties.latestRevisionName \
+            -o tsv)"
 
-          echo "Health smoke test failed."
-          exit 1
+          READY_REVISION="$(az containerapp show \
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --query properties.latestReadyRevisionName \
+            -o tsv)"
+
+          echo "APP_STATE=${APP_STATE}"
+          echo "LATEST_REVISION=${LATEST_REVISION}"
+          echo "READY_REVISION=${READY_REVISION}"
+
+          if [ "$APP_STATE" != "Running" ]; then
+            echo "Container App is not running."
+            exit 1
+          fi
+
+          if [ -z "$LATEST_REVISION" ] || [ "$LATEST_REVISION" != "$READY_REVISION" ]; then
+            echo "Latest revision is not ready."
+            exit 1
+          fi
+
+          REPLICAS="$(az containerapp replica list \
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --revision "$LATEST_REVISION" \
+            --query 'length(@)' \
+            -o tsv)"
+
+          echo "REPLICA_COUNT=${REPLICAS}"
+
+          if [ "${REPLICAS:-0}" -lt 1 ]; then
+            echo "No running replica found for latest revision."
+            exit 1
+          fi
+
+          echo "Internal Container App runtime validation passed."
