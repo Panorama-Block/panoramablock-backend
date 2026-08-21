@@ -84,28 +84,82 @@ jobs:
           echo "Latest revision did not become ready in time."
           exit 1
 
-      - name: Smoke test health endpoint
+      - name: Validate deployed service health
         run: |
           set -euo pipefail
+
+          EXTERNAL="$(az containerapp show --name "$APP_NAME" --resource-group "$RG" --query properties.configuration.ingress.external -o tsv)"
           FQDN="$(az containerapp show --name "$APP_NAME" --resource-group "$RG" --query properties.configuration.ingress.fqdn -o tsv)"
-          if [ -z "${FQDN:-}" ]; then
-            echo "Could not resolve ${APP_NAME} FQDN"
+
+          if [ "$EXTERNAL" = "true" ]; then
+            if [ -z "${FQDN:-}" ]; then
+              echo "Could not resolve ${APP_NAME} FQDN"
+              exit 1
+            fi
+
+            URL="https://${FQDN}/health"
+            for attempt in 1 2 3 4 5; do
+              status="$(curl -sS -L --max-time 30 -o /tmp/health_body.txt -w '%{http_code}' "$URL" || true)"
+              echo "HEALTH_STATUS=${status}"
+              cat /tmp/health_body.txt || true
+
+              if [ "$status" = "200" ]; then
+                echo "External health smoke test passed."
+                exit 0
+              fi
+
+              sleep 15
+            done
+
+            echo "External health smoke test failed."
             exit 1
           fi
 
-          URL="https://${FQDN}/health"
-          for attempt in 1 2 3 4 5; do
-            status="$(curl -sS -L --max-time 30 -o /tmp/health_body.txt -w '%{http_code}' "$URL" || true)"
-            echo "HEALTH_STATUS=${status}"
-            cat /tmp/health_body.txt || true
+          echo "${APP_NAME} uses internal ingress; validating Azure runtime state instead of curling its internal FQDN."
 
-            if [ "$status" = "200" ]; then
-              echo "Health smoke test passed."
-              exit 0
-            fi
+          RUNNING_STATUS="$(az containerapp show --name "$APP_NAME" --resource-group "$RG" --query properties.runningStatus -o tsv)"
+          LATEST_REVISION="$(az containerapp show --name "$APP_NAME" --resource-group "$RG" --query properties.latestRevisionName -o tsv)"
+          LATEST_READY_REVISION="$(az containerapp show --name "$APP_NAME" --resource-group "$RG" --query properties.latestReadyRevisionName -o tsv)"
+          REVISION_STATE="$(az containerapp revision list --name "$APP_NAME" --resource-group "$RG" --query "[?name=='${LATEST_REVISION}'] | [0].[properties.active, properties.replicas, properties.healthState, properties.runningState]" -o tsv)"
 
-            sleep 15
-          done
+          read -r ACTIVE REPLICAS HEALTH_STATE RUNNING_STATE <<< "$REVISION_STATE"
 
-          echo "Health smoke test failed."
-          exit 1
+          echo "runningStatus=${RUNNING_STATUS}"
+          echo "latestRevisionName=${LATEST_REVISION}"
+          echo "latestReadyRevisionName=${LATEST_READY_REVISION}"
+          echo "active=${ACTIVE}"
+          echo "replicas=${REPLICAS}"
+          echo "healthState=${HEALTH_STATE}"
+          echo "runningState=${RUNNING_STATE}"
+
+          if [ "$RUNNING_STATUS" != "Running" ]; then
+            echo "Container App is not running."
+            exit 1
+          fi
+
+          if [ -z "$LATEST_REVISION" ] || [ "$LATEST_REVISION" != "$LATEST_READY_REVISION" ]; then
+            echo "Latest revision is not the latest ready revision."
+            exit 1
+          fi
+
+          if [ "$ACTIVE" != "true" ] && [ "$ACTIVE" != "True" ]; then
+            echo "Latest revision is not active."
+            exit 1
+          fi
+
+          if [ -z "${REPLICAS:-}" ] || [ "$REPLICAS" -lt 1 ]; then
+            echo "Latest revision has no running replicas."
+            exit 1
+          fi
+
+          if [ "$HEALTH_STATE" != "Healthy" ]; then
+            echo "Latest revision is not healthy."
+            exit 1
+          fi
+
+          if [ "$RUNNING_STATE" != "Running" ]; then
+            echo "Latest revision is not running."
+            exit 1
+          fi
+
+          echo "Internal Container App runtime health validation passed."
