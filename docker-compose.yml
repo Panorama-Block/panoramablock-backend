@@ -338,28 +338,6 @@ services:
         condition: service_healthy
     restart: always
 
-  database_gateway:
-    build:
-      context: ./database
-      dockerfile: Dockerfile
-    container_name: panorama-database-gateway
-    ports:
-      - "${DATABASE_GATEWAY_PORT:-8080}:8080"
-    environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@engine_postgres:5432/panorama_db?schema=public
-      - PORT=8080
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - JWT_SECRET=${JWT_SECRET:-changeme}
-    env_file:
-      - .env
-    command: sh -c "npx prisma migrate deploy && node dist/apps/gateway/src/main.js"
-    depends_on:
-      engine_postgres:
-        condition: service_healthy
-      engine_postgres_bootstrap:
-        condition: service_completed_successfully
-    restart: always
-
   execution_service:
     build:
       context: ../panoramablock-execution-layer/backend
