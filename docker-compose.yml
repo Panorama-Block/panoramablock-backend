@@ -340,7 +340,7 @@ services:
 
   execution_service:
     build:
-      context: ../panoramablock-execution-layer/backend
+      context: ../execution-layer/backend
       dockerfile: Dockerfile
     container_name: panorama-execution-service
     ports:
