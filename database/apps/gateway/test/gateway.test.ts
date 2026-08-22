@@ -222,6 +222,183 @@ describe('Gateway HTTP API', () => {
 
   const authHeader = () => `Bearer ${signTestToken()}`;
 
+  it('allows the health endpoint without authentication', async () => {
+    const response = await request(app.server)
+      .get('/health');
+
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe('ok');
+  });
+
+  it('rejects requests without a bearer token', async () => {
+    const response = await request(app.server)
+      .get('/v1/users')
+      .set('x-tenant-id', 'tenant-test');
+
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual({
+      error: 'unauthorized',
+      message: 'Bearer token required'
+    });
+  });
+
+  it('rejects an invalid bearer token', async () => {
+    const response = await request(app.server)
+      .get('/v1/users')
+      .set('authorization', 'Bearer definitely-not-a-valid-jwt')
+      .set('x-tenant-id', 'tenant-test');
+
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual({
+      error: 'unauthorized',
+      message: 'Invalid or expired bearer token'
+    });
+  });
+
+  it('rejects a token without a tenant claim', async () => {
+    const tokenWithoutTenant = signTestToken({ tenant: undefined });
+
+    const response = await request(app.server)
+      .get('/v1/users')
+      .set('authorization', `Bearer ${tokenWithoutTenant}`)
+      .set('x-tenant-id', 'tenant-test');
+
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual({
+      error: 'unauthorized',
+      message: 'Token tenant claim required'
+    });
+  });
+
+  it('rejects a tenant header that conflicts with the token tenant', async () => {
+    const response = await request(app.server)
+      .get('/v1/users')
+      .set('authorization', authHeader())
+      .set('x-tenant-id', 'different-tenant');
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({
+      error: 'tenant_mismatch',
+      message: 'Token tenant does not match x-tenant-id'
+    });
+  });
+
+  it('accepts the existing database gateway service token for its configured tenant', async () => {
+    const previousToken = process.env.DB_GATEWAY_SERVICE_TOKEN;
+    const previousTenant = process.env.DB_GATEWAY_TENANT_ID;
+
+    process.env.DB_GATEWAY_SERVICE_TOKEN =
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    process.env.DB_GATEWAY_TENANT_ID = 'panorama-default';
+
+    try {
+      const response = await request(app.server)
+        .get('/v1/users')
+        .set(
+          'authorization',
+          `Bearer ${process.env.DB_GATEWAY_SERVICE_TOKEN}`
+        )
+        .set('x-tenant-id', 'panorama-default');
+
+      expect(response.status).toBe(200);
+    } finally {
+      if (previousToken === undefined) {
+        delete process.env.DB_GATEWAY_SERVICE_TOKEN;
+      } else {
+        process.env.DB_GATEWAY_SERVICE_TOKEN = previousToken;
+      }
+
+      if (previousTenant === undefined) {
+        delete process.env.DB_GATEWAY_TENANT_ID;
+      } else {
+        process.env.DB_GATEWAY_TENANT_ID = previousTenant;
+      }
+    }
+  });
+
+  it('rejects the database gateway service token for a different tenant', async () => {
+    const previousToken = process.env.DB_GATEWAY_SERVICE_TOKEN;
+    const previousTenant = process.env.DB_GATEWAY_TENANT_ID;
+
+    process.env.DB_GATEWAY_SERVICE_TOKEN =
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    process.env.DB_GATEWAY_TENANT_ID = 'panorama-default';
+
+    try {
+      const response = await request(app.server)
+        .get('/v1/users')
+        .set(
+          'authorization',
+          `Bearer ${process.env.DB_GATEWAY_SERVICE_TOKEN}`
+        )
+        .set('x-tenant-id', 'different-tenant');
+
+      expect(response.status).toBe(403);
+      expect(response.body).toEqual({
+        error: 'tenant_mismatch',
+        message: 'Service token tenant does not match x-tenant-id'
+      });
+    } finally {
+      if (previousToken === undefined) {
+        delete process.env.DB_GATEWAY_SERVICE_TOKEN;
+      } else {
+        process.env.DB_GATEWAY_SERVICE_TOKEN = previousToken;
+      }
+
+      if (previousTenant === undefined) {
+        delete process.env.DB_GATEWAY_TENANT_ID;
+      } else {
+        process.env.DB_GATEWAY_TENANT_ID = previousTenant;
+      }
+    }
+  });
+
+  it('does not accept an incorrect database gateway service token', async () => {
+    const previousToken = process.env.DB_GATEWAY_SERVICE_TOKEN;
+    const previousTenant = process.env.DB_GATEWAY_TENANT_ID;
+
+    process.env.DB_GATEWAY_SERVICE_TOKEN =
+      '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    process.env.DB_GATEWAY_TENANT_ID = 'panorama-default';
+
+    try {
+      const response = await request(app.server)
+        .get('/v1/users')
+        .set(
+          'authorization',
+          'Bearer ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+        )
+        .set('x-tenant-id', 'panorama-default');
+
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({
+        error: 'unauthorized',
+        message: 'Invalid or expired bearer token'
+      });
+    } finally {
+      if (previousToken === undefined) {
+        delete process.env.DB_GATEWAY_SERVICE_TOKEN;
+      } else {
+        process.env.DB_GATEWAY_SERVICE_TOKEN = previousToken;
+      }
+
+      if (previousTenant === undefined) {
+        delete process.env.DB_GATEWAY_TENANT_ID;
+      } else {
+        process.env.DB_GATEWAY_TENANT_ID = previousTenant;
+      }
+    }
+  });
+
+  it('accepts a valid token for the matching tenant', async () => {
+    const response = await request(app.server)
+      .get('/v1/users')
+      .set('authorization', authHeader())
+      .set('x-tenant-id', 'tenant-test');
+
+    expect(response.status).toBe(200);
+  });
+
   it('lists users for the tenant', async () => {
     const response = await request(app.server)
       .get('/v1/users')
@@ -335,7 +512,11 @@ describe('Gateway HTTP API', () => {
       .set('x-tenant-id', 'tenant-test');
 
     expect(conversationList.status).toBe(200);
-    expect(conversationList.body.data.some((item: any) => item.id === encodeCompositeId(['0:abcd', 'conv-ton-1']))).toBe(true);
+    expect(
+      conversationList.body.data.some(
+        (item: any) => item.id === encodeCompositeId(['user-1', 'conv-1'])
+      )
+    ).toBe(true);
 
     const sharedStateResponse = await request(app.server)
       .get(`/v1/agent-shared-states/${encodeCompositeId(['swap_agent', '0:abcd', 'conv-ton-1'])}`)
