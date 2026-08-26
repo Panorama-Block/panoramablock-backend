@@ -1,0 +1,66 @@
+name: Test Azure V2 ACR
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Azure login using V2 OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID_V2 }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to ACR
+        run: |
+          az acr login --name panoramadevpublicapi
+
+      - name: Build isolated test image
+        run: |
+          cat > Dockerfile.v2-test <<'DOCKERFILE'
+          FROM alpine:3.20
+          RUN echo "PanoramaBlock V2 deployment identity test" > /proof.txt
+          CMD ["cat", "/proof.txt"]
+          DOCKERFILE
+
+          docker build \
+            -f Dockerfile.v2-test \
+            -t panoramadevpublicapi.azurecr.io/control-audit/v2-oidc-test:${GITHUB_SHA} \
+            .
+
+      - name: Push isolated test image
+        run: |
+          docker push \
+            panoramadevpublicapi.azurecr.io/control-audit/v2-oidc-test:${GITHUB_SHA}
+
+      - name: Verify image exists in ACR
+        run: |
+          az acr repository show-tags \
+            --name panoramadevpublicapi \
+            --repository control-audit/v2-oidc-test \
+            --output table
+
+      - name: Pull image back
+        run: |
+          docker image rm \
+            panoramadevpublicapi.azurecr.io/control-audit/v2-oidc-test:${GITHUB_SHA}
+
+          docker pull \
+            panoramadevpublicapi.azurecr.io/control-audit/v2-oidc-test:${GITHUB_SHA}
+
+      - name: Run proof image
+        run: |
+          OUTPUT=$(docker run --rm \
+            panoramadevpublicapi.azurecr.io/control-audit/v2-oidc-test:${GITHUB_SHA})
+
+          echo "$OUTPUT"
+
+          test "$OUTPUT" = "PanoramaBlock V2 deployment identity test"
