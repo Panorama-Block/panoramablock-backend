@@ -110,26 +110,39 @@ jobs:
           echo "READY_REVISION=${READY_REVISION}"
 
           if [ "$APP_STATE" != "Running" ]; then
-            echo "Container App is not running."
+            echo "ERROR: Container App is not running."
             exit 1
           fi
 
           if [ -z "$LATEST_REVISION" ] || [ "$LATEST_REVISION" != "$READY_REVISION" ]; then
-            echo "Latest revision is not ready."
+            echo "ERROR: latest revision is not ready."
             exit 1
           fi
 
-          REPLICAS="$(az containerapp replica list \
+          HEALTH_STATE="$(az containerapp revision show \
             --name "$APP_NAME" \
             --resource-group "$RG" \
             --revision "$LATEST_REVISION" \
-            --query 'length(@)' \
+            --query properties.healthState \
             -o tsv)"
 
-          echo "REPLICA_COUNT=${REPLICAS}"
+          PROVISIONING_STATE="$(az containerapp revision show \
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --revision "$LATEST_REVISION" \
+            --query properties.provisioningState \
+            -o tsv)"
 
-          if [ "${REPLICAS:-0}" -lt 1 ]; then
-            echo "No running replica found for latest revision."
+          echo "HEALTH_STATE=${HEALTH_STATE}"
+          echo "PROVISIONING_STATE=${PROVISIONING_STATE}"
+
+          if [ "$HEALTH_STATE" != "Healthy" ]; then
+            echo "ERROR: deployed revision is not healthy."
+            exit 1
+          fi
+
+          if [ "$PROVISIONING_STATE" != "Provisioned" ]; then
+            echo "ERROR: deployed revision is not provisioned."
             exit 1
           fi
 
