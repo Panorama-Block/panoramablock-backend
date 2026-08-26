@@ -1,0 +1,76 @@
+name: Test Azure V2 OIDC
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login using V2 OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID_V2 }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Show authenticated context
+        run: |
+          az account show \
+            --query '{
+              subscription:id,
+              tenant:tenantId,
+              user:user
+            }' \
+            --output json
+
+      - name: Read authorised Container App
+        run: |
+          az containerapp show \
+            --name panorama-dev-auth-api \
+            --resource-group rg-panorama-dev \
+            --query '{
+              name:name,
+              latestRevision:properties.latestRevisionName,
+              latestReadyRevision:properties.latestReadyRevisionName
+            }' \
+            --output json
+
+      - name: Read shared managed environment
+        run: |
+          az containerapp env show \
+            --name panorama-dev-public-api-aca-env \
+            --resource-group rg-panorama-dev \
+            --query '{
+              name:name,
+              provisioningState:properties.provisioningState
+            }' \
+            --output json
+
+      - name: Negative test - unrelated VM must be denied
+        shell: bash
+        run: |
+          set +e
+
+          OUTPUT=$(az vm show \
+            --name panorama-dev-vm \
+            --resource-group rg-panorama-dev \
+            --output json 2>&1)
+
+          STATUS=$?
+
+          echo "$OUTPUT"
+
+          if [ "$STATUS" -eq 0 ]; then
+            echo "ERROR: V2 unexpectedly has VM read access."
+            exit 1
+          fi
+
+          echo "PASS: VM access correctly denied."
