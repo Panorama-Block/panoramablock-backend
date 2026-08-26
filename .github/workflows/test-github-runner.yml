@@ -1,0 +1,14 @@
+name: Test GitHub Runner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Runner proof
+        run: |
+          echo "Runner started"
+          uname -a
+          date -u
