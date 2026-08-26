@@ -1,0 +1,82 @@
+name: Test Azure V2 Container App Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Exact existing image reference to redeploy
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Azure login using V2 OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID_V2 }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Capture before state
+        run: |
+          az containerapp show \
+            --name panorama-dev-lido-api \
+            --resource-group rg-panorama-dev \
+            --query '{
+              image:properties.template.containers[0].image,
+              latestRevision:properties.latestRevisionName,
+              latestReadyRevision:properties.latestReadyRevisionName
+            }' \
+            --output json
+
+      - name: Reapply existing image
+        run: |
+          az containerapp update \
+            --name panorama-dev-lido-api \
+            --resource-group rg-panorama-dev \
+            --image '${{ inputs.image }}'
+
+      - name: Wait for ready revision
+        run: |
+          for attempt in {1..20}; do
+            LATEST=$(az containerapp show \
+              --name panorama-dev-lido-api \
+              --resource-group rg-panorama-dev \
+              --query properties.latestRevisionName \
+              --output tsv)
+
+            READY=$(az containerapp show \
+              --name panorama-dev-lido-api \
+              --resource-group rg-panorama-dev \
+              --query properties.latestReadyRevisionName \
+              --output tsv)
+
+            echo "latest=$LATEST ready=$READY"
+
+            if [ -n "$LATEST" ] && [ "$LATEST" = "$READY" ]; then
+              exit 0
+            fi
+
+            sleep 10
+          done
+
+          echo "ERROR: latest revision did not become ready"
+          exit 1
+
+      - name: Verify image unchanged
+        run: |
+          IMAGE=$(az containerapp show \
+            --name panorama-dev-lido-api \
+            --resource-group rg-panorama-dev \
+            --query properties.template.containers[0].image \
+            --output tsv)
+
+          echo "Current image: $IMAGE"
+
+          test "$IMAGE" = '${{ inputs.image }}'
