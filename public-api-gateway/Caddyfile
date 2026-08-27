@@ -1,0 +1,111 @@
+{
+	admin off
+}
+
+:8080 {
+	encode gzip zstd
+
+	handle /__gateway/health {
+		respond "Panorama public API gateway is running." 200
+	}
+
+	handle /__health/auth {
+		rewrite * /health
+		reverse_proxy {$AUTH_UPSTREAM} {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	handle /__health/bridge {
+		rewrite * /health
+		reverse_proxy {$BRIDGE_UPSTREAM} {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	handle /__health/swap {
+		rewrite * /health
+		reverse_proxy {$SWAP_UPSTREAM} {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	handle /__health/lido {
+		rewrite * /health
+		reverse_proxy {$LIDO_UPSTREAM} {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	handle /__health/lending {
+		rewrite * /health
+		reverse_proxy {$LENDING_UPSTREAM} {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	handle /__health/telegram {
+		rewrite * /healthz
+		reverse_proxy {$TELEGRAM_UPSTREAM} {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	@telegram_auth path /auth/telegram/verify
+	handle @telegram_auth {
+		reverse_proxy {$TELEGRAM_UPSTREAM} {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	@telegram_gateway path /telegram* /miniapp* /healthz /__miniapp_debug
+	handle @telegram_gateway {
+		reverse_proxy {$TELEGRAM_UPSTREAM} {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	@auth path /auth* /api/auth*
+	handle @auth {
+		reverse_proxy {$AUTH_UPSTREAM} {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	@bridge path /bridge* /api/bridge*
+	handle @bridge {
+		reverse_proxy {$BRIDGE_UPSTREAM} {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	@swap path /swap* /api/swap*
+	handle @swap {
+		reverse_proxy {$SWAP_UPSTREAM} {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	@lido path /lido* /api/lido*
+	handle @lido {
+		reverse_proxy {$LIDO_UPSTREAM} {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	@lending path /lending* /api/lending*
+	handle @lending {
+		reverse_proxy {$LENDING_UPSTREAM} {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	@heavy path /dca* /api/dca* /diagram* /api/diagram* /database* /api/database* /execution* /api/execution* /engine*
+	handle @heavy {
+		reverse_proxy {$HEAVY_VM_BACKHAUL_URL}
+	}
+
+	handle {
+		respond "Panorama public API gateway is running." 200
+	}
+}

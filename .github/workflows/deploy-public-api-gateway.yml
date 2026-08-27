@@ -1,0 +1,233 @@
+name: Deploy Public API Gateway
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "public-api-gateway/**"
+      - ".github/workflows/deploy-public-api-gateway.yml"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  RG: rg-panorama-dev
+  APP_NAME: panorama-dev-public-api-gateway
+  ACR_NAME: panoramadevpublicapi
+  IMAGE_REPO: panoramadevpublicapi.azurecr.io/public-api-gateway
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Enable Container Apps extension
+        run: az extension add --name containerapp --upgrade
+
+      - name: Login to ACR
+        run: az acr login --name "$ACR_NAME"
+
+      - name: Build public API gateway image
+        env:
+          IMAGE_SHA: ${{ env.IMAGE_REPO }}:${{ env.IMAGE_TAG }}
+          IMAGE_LATEST: ${{ env.IMAGE_REPO }}:latest
+        run: |
+          set -euo pipefail
+
+          docker build \
+            -t "$IMAGE_SHA" \
+            -t "$IMAGE_LATEST" \
+            ./public-api-gateway
+
+      - name: Validate gateway configuration
+        env:
+          IMAGE_SHA: ${{ env.IMAGE_REPO }}:${{ env.IMAGE_TAG }}
+        run: |
+          set -euo pipefail
+
+          docker run \
+            --rm \
+            --entrypoint caddy \
+            "$IMAGE_SHA" \
+            validate \
+            --config /etc/caddy/Caddyfile \
+            --adapter caddyfile
+
+      - name: Push public API gateway image
+        env:
+          IMAGE_SHA: ${{ env.IMAGE_REPO }}:${{ env.IMAGE_TAG }}
+          IMAGE_LATEST: ${{ env.IMAGE_REPO }}:latest
+        run: |
+          set -euo pipefail
+
+          docker push "$IMAGE_SHA"
+          docker push "$IMAGE_LATEST"
+
+      - name: Deploy public API gateway
+        env:
+          IMAGE_SHA: ${{ env.IMAGE_REPO }}:${{ env.IMAGE_TAG }}
+        run: |
+          set -euo pipefail
+
+          az containerapp update \
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --image "$IMAGE_SHA"
+
+      - name: Wait for latest revision ready
+        run: |
+          set -euo pipefail
+
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            latest_revision="$(az containerapp show \
+              --name "$APP_NAME" \
+              --resource-group "$RG" \
+              --query properties.latestRevisionName \
+              -o tsv)"
+
+            latest_ready_revision="$(az containerapp show \
+              --name "$APP_NAME" \
+              --resource-group "$RG" \
+              --query properties.latestReadyRevisionName \
+              -o tsv)"
+
+            echo "latestRevisionName=${latest_revision}"
+            echo "latestReadyRevisionName=${latest_ready_revision}"
+
+            if [ -n "$latest_revision" ] && \
+               [ "$latest_revision" = "$latest_ready_revision" ]; then
+              echo "Latest revision is ready."
+              exit 0
+            fi
+
+            sleep 15
+          done
+
+          echo "ERROR: latest revision did not become ready in time."
+          exit 1
+
+      - name: Verify deployed public API gateway
+        run: |
+          set -euo pipefail
+
+          APP_STATE="$(az containerapp show \
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --query properties.runningStatus \
+            -o tsv)"
+
+          LATEST_REVISION="$(az containerapp show \
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --query properties.latestRevisionName \
+            -o tsv)"
+
+          READY_REVISION="$(az containerapp show \
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --query properties.latestReadyRevisionName \
+            -o tsv)"
+
+          DEPLOYED_IMAGE="$(az containerapp show \
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --query 'properties.template.containers[0].image' \
+            -o tsv)"
+
+          EXPECTED_IMAGE="${IMAGE_REPO}:${IMAGE_TAG}"
+
+          echo "APP_STATE=${APP_STATE}"
+          echo "LATEST_REVISION=${LATEST_REVISION}"
+          echo "READY_REVISION=${READY_REVISION}"
+          echo "EXPECTED_IMAGE=${EXPECTED_IMAGE}"
+          echo "DEPLOYED_IMAGE=${DEPLOYED_IMAGE}"
+
+          if [ "$APP_STATE" != "Running" ]; then
+            echo "ERROR: Container App is not running."
+            exit 1
+          fi
+
+          if [ -z "$LATEST_REVISION" ] || \
+             [ "$LATEST_REVISION" != "$READY_REVISION" ]; then
+            echo "ERROR: latest revision is not ready."
+            exit 1
+          fi
+
+          if [ "$DEPLOYED_IMAGE" != "$EXPECTED_IMAGE" ]; then
+            echo "ERROR: deployed image does not match Git SHA image."
+            exit 1
+          fi
+
+          HEALTH_STATE="$(az containerapp revision show \
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --revision "$LATEST_REVISION" \
+            --query properties.healthState \
+            -o tsv)"
+
+          PROVISIONING_STATE="$(az containerapp revision show \
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --revision "$LATEST_REVISION" \
+            --query properties.provisioningState \
+            -o tsv)"
+
+          echo "HEALTH_STATE=${HEALTH_STATE}"
+          echo "PROVISIONING_STATE=${PROVISIONING_STATE}"
+
+          if [ "$HEALTH_STATE" != "Healthy" ]; then
+            echo "ERROR: deployed revision is not healthy."
+            exit 1
+          fi
+
+          if [ "$PROVISIONING_STATE" != "Provisioned" ]; then
+            echo "ERROR: deployed revision is not provisioned."
+            exit 1
+          fi
+
+          FQDN="$(az containerapp show \
+            --name "$APP_NAME" \
+            --resource-group "$RG" \
+            --query properties.configuration.ingress.fqdn \
+            -o tsv)"
+
+          URL="https://${FQDN}/__gateway/health"
+
+          for attempt in 1 2 3 4 5; do
+            status="$(curl \
+              -sS \
+              -L \
+              --max-time 30 \
+              -o /tmp/gateway_health_body.txt \
+              -w '%{http_code}' \
+              "$URL" || true)"
+
+            echo "GATEWAY_HEALTH_STATUS=${status}"
+            cat /tmp/gateway_health_body.txt || true
+
+            if [ "$status" = "200" ]; then
+              echo "Public API gateway smoke test passed."
+              exit 0
+            fi
+
+            sleep 15
+          done
+
+          echo "ERROR: public API gateway smoke test failed."
+          exit 1
