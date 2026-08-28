@@ -116,6 +116,7 @@ jobs:
           mkdir -p .deploy-tmp
           POSTGRES_ADMIN_USER=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-admin-user --query value -o tsv)
           POSTGRES_ADMIN_PASSWORD=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-admin-password --query value -o tsv)
+          echo "::add-mask::${POSTGRES_ADMIN_PASSWORD}"
           echo "POSTGRES_ADMIN_USER=${POSTGRES_ADMIN_USER}" >> "$GITHUB_ENV"
           echo "POSTGRES_ADMIN_PASSWORD=${POSTGRES_ADMIN_PASSWORD}" >> "$GITHUB_ENV"
           cat > .deploy-tmp/.env.production <<EOF
