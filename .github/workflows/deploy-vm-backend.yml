@@ -144,6 +144,7 @@ jobs:
           DB_GATEWAY_SYNC_ENABLED=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name db-gateway-sync-enabled --query value -o tsv)
           DB_GATEWAY_TIMEOUT_MS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name db-gateway-timeout-ms --query value -o tsv)
           PHASE2_EVIDENCE_ENABLED=${{ inputs.phase2_evidence_enabled }}
+          PHASE2_ADMIN_WALLETS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name phase2-admin-wallets --query value -o tsv)
           THIRDWEB_CLIENT_ID=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name thirdweb-client-id --query value -o tsv)
           THIRDWEB_SECRET_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name thirdweb-secret-key --query value -o tsv)
           THIRDWEB_API_SECRET_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name thirdweb-api-secret-key --query value -o tsv)
