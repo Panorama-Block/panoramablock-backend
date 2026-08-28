@@ -7,6 +7,11 @@ on:
         description: Full execution-service image reference published by panoramablock-execution-layer
         required: false
         type: string
+      phase2_evidence_enabled:
+        description: Enable Phase 2 durable transaction evidence
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -137,6 +142,7 @@ jobs:
           DB_GATEWAY_TENANT_ID=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name db-gateway-tenant-id --query value -o tsv)
           DB_GATEWAY_SYNC_ENABLED=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name db-gateway-sync-enabled --query value -o tsv)
           DB_GATEWAY_TIMEOUT_MS=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name db-gateway-timeout-ms --query value -o tsv)
+          PHASE2_EVIDENCE_ENABLED=${{ inputs.phase2_evidence_enabled }}
           THIRDWEB_CLIENT_ID=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name thirdweb-client-id --query value -o tsv)
           THIRDWEB_SECRET_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name thirdweb-secret-key --query value -o tsv)
           THIRDWEB_API_SECRET_KEY=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name thirdweb-api-secret-key --query value -o tsv)
