@@ -637,3 +637,88 @@ model UserProfile {
   @@index([walletAddress])
   @@index([tenantId])
 }
+
+// ============================================================================
+// PHASE 2 TRANSACTION EVIDENCE
+// ============================================================================
+
+model TransactionEvidence {
+  correlationId       String   @id
+  evidenceVersion     String   @default("1.0")
+  action              String
+  chainId             Int
+  network             String
+  walletAddress       String
+  assetIn             String?
+  assetOut            String?
+  amountRaw           String?
+  slippageBps         Int?
+  intent              Json
+  preparedPayloadHash String?
+  preparedAt          DateTime?
+  preparedMetadata    Json?
+  status              String   @default("intent-recorded")
+  verificationStatus  String?
+  errorReason         String?
+  sourceService       String   @default("execution-layer")
+  tenantId            String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  verifiedAt          DateTime?
+
+  steps TransactionEvidenceStep[]
+
+  @@index([chainId, createdAt(sort: Desc)])
+  @@index([walletAddress, createdAt(sort: Desc)])
+  @@index([status])
+  @@index([tenantId])
+}
+
+model TransactionEvidenceStep {
+  id                         String   @id
+  correlationId              String
+  stepIndex                  Int
+  action                     String
+  chainId                    Int
+  toAddress                  String
+  value                      String
+  dataHash                   String
+  preparedStepHash           String
+  preparedAt                 DateTime
+  txHash                     String?
+  submittedAt                DateTime?
+  executionMechanism         String?
+  providerMetadata           Json?
+  blockNumber                String?
+  blockHash                  String?
+  receiptStatus              Int?
+  fromAddress                String?
+  receiptToAddress           String?
+  contractAddress            String?
+  gasUsed                    String?
+  effectiveGasPrice          String?
+  logsHash                   String?
+  receipt                    Json?
+  receiptRetrievedAt         DateTime?
+  verified                   Boolean?
+  receiptMatchesSubmission   Boolean?
+  senderMatchesExpected      Boolean?
+  destinationMatchesExpected Boolean?
+  chainMatchesExpected       Boolean?
+  verificationSource         String?
+  verification               Json?
+  verificationError          String?
+  verifiedAt                 DateTime?
+  tenantId                   String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  evidence TransactionEvidence @relation(fields: [correlationId], references: [correlationId], onDelete: Cascade)
+
+  @@unique([correlationId, stepIndex])
+  @@index([txHash])
+  @@index([chainId, txHash])
+  @@index([correlationId])
+  @@index([tenantId])
+}
+

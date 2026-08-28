@@ -1169,6 +1169,142 @@ const entityConfigs: EntityConfig[] = [
   },
 
   // ============================================================================
+  // PHASE 2 TRANSACTION EVIDENCE
+  // ============================================================================
+
+  {
+    collection: 'transaction-evidence',
+    model: 'TransactionEvidence',
+    primaryKeys: ['correlationId'],
+    tenantField: 'tenantId',
+    defaultOrderBy: { createdAt: 'desc' },
+    create: z
+      .object({
+        correlationId: z.string().min(1),
+        evidenceVersion: z.string().optional(),
+        action: z.string(),
+        chainId: z.number().int(),
+        network: z.string(),
+        walletAddress: z.string(),
+        assetIn: z.string().optional(),
+        assetOut: z.string().optional(),
+        amountRaw: z.string().optional(),
+        slippageBps: z.number().int().optional(),
+        intent: jsonRecord,
+        preparedPayloadHash: z.string().optional(),
+        preparedAt: isoDate.optional(),
+        preparedMetadata: jsonRecord.optional(),
+        status: z.string().optional(),
+        verificationStatus: z.string().optional(),
+        errorReason: z.string().optional(),
+        sourceService: z.string().optional(),
+        tenantId: z.string(),
+        createdAt: isoDate.optional(),
+        updatedAt: isoDate.optional(),
+        verifiedAt: isoDate.optional()
+      })
+      .strict(),
+    update: z
+      .object({
+        preparedPayloadHash: z.string().optional(),
+        preparedAt: isoDate.optional(),
+        preparedMetadata: jsonRecord.optional(),
+        status: z.string().optional(),
+        verificationStatus: z.string().optional(),
+        errorReason: z.string().optional(),
+        updatedAt: isoDate.optional(),
+        verifiedAt: isoDate.optional()
+      })
+      .strict()
+      .refine((data) => Object.keys(data).length > 0, {
+        message: 'At least one field is required'
+      }),
+    filter: baseQuerySchema
+  },
+
+  {
+    collection: 'transaction-evidence-steps',
+    model: 'TransactionEvidenceStep',
+    primaryKeys: ['id'],
+    tenantField: 'tenantId',
+    defaultOrderBy: { stepIndex: 'asc' },
+    create: z
+      .object({
+        id: z.string().min(1),
+        correlationId: z.string().min(1),
+        stepIndex: z.number().int().nonnegative(),
+        action: z.string(),
+        chainId: z.number().int(),
+        toAddress: z.string(),
+        value: z.string(),
+        dataHash: z.string(),
+        preparedStepHash: z.string(),
+        preparedAt: isoDate,
+        txHash: z.string().optional(),
+        submittedAt: isoDate.optional(),
+        executionMechanism: z.string().optional(),
+        providerMetadata: jsonRecord.optional(),
+        blockNumber: z.string().optional(),
+        blockHash: z.string().optional(),
+        receiptStatus: z.number().int().optional(),
+        fromAddress: z.string().optional(),
+        receiptToAddress: z.string().optional(),
+        contractAddress: z.string().optional(),
+        gasUsed: z.string().optional(),
+        effectiveGasPrice: z.string().optional(),
+        logsHash: z.string().optional(),
+        receipt: jsonRecord.optional(),
+        receiptRetrievedAt: isoDate.optional(),
+        verified: z.boolean().optional(),
+        receiptMatchesSubmission: z.boolean().optional(),
+        senderMatchesExpected: z.boolean().optional(),
+        destinationMatchesExpected: z.boolean().optional(),
+        chainMatchesExpected: z.boolean().optional(),
+        verificationSource: z.string().optional(),
+        verification: jsonRecord.optional(),
+        verificationError: z.string().optional(),
+        verifiedAt: isoDate.optional(),
+        tenantId: z.string(),
+        createdAt: isoDate.optional(),
+        updatedAt: isoDate.optional()
+      })
+      .strict(),
+    update: z
+      .object({
+        txHash: z.string().optional(),
+        submittedAt: isoDate.optional(),
+        executionMechanism: z.string().optional(),
+        providerMetadata: jsonRecord.optional(),
+        blockNumber: z.string().optional(),
+        blockHash: z.string().optional(),
+        receiptStatus: z.number().int().optional(),
+        fromAddress: z.string().optional(),
+        receiptToAddress: z.string().optional(),
+        contractAddress: z.string().optional(),
+        gasUsed: z.string().optional(),
+        effectiveGasPrice: z.string().optional(),
+        logsHash: z.string().optional(),
+        receipt: jsonRecord.optional(),
+        receiptRetrievedAt: isoDate.optional(),
+        verified: z.boolean().optional(),
+        receiptMatchesSubmission: z.boolean().optional(),
+        senderMatchesExpected: z.boolean().optional(),
+        destinationMatchesExpected: z.boolean().optional(),
+        chainMatchesExpected: z.boolean().optional(),
+        verificationSource: z.string().optional(),
+        verification: jsonRecord.optional(),
+        verificationError: z.string().optional(),
+        verifiedAt: isoDate.optional(),
+        updatedAt: isoDate.optional()
+      })
+      .strict()
+      .refine((data) => Object.keys(data).length > 0, {
+        message: 'At least one field is required'
+      }),
+    filter: baseQuerySchema
+  },
+
+  // ============================================================================
   // USER PROFILE
   // ============================================================================
 
