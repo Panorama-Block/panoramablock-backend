@@ -329,6 +329,19 @@ describe('Gateway HTTP API', () => {
   });
 
   it('normalizes list responses using encoded ids for composite-key entities', async () => {
+    await repository.create(
+      'conversations',
+      {
+        id: 'list-normalisation-fixture',
+        userId: '0:abcd',
+        conversationId: 'conv-ton-1'
+      },
+      {
+        requestId: 'list-normalisation-fixture',
+        tenantId: 'tenant-test'
+      }
+    );
+
     const conversationList = await request(app.server)
       .get('/v1/conversations')
       .set('authorization', authHeader())

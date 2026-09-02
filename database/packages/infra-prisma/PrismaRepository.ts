@@ -152,6 +152,24 @@ const ensureOwnership = async (
   }
 };
 
+const normalizeOrderBy = (
+  orderBy?: Record<string, 'asc' | 'desc'>
+): Record<string, 'asc' | 'desc'> | Array<Record<string, 'asc' | 'desc'>> | undefined => {
+  if (!orderBy) {
+    return undefined;
+  }
+
+  const entries = Object.entries(orderBy);
+
+  if (entries.length <= 1) {
+    return orderBy;
+  }
+
+  return entries.map(([field, direction]) => ({
+    [field]: direction
+  }));
+};
+
 const recordOutbox = async (
   executor: PrismaExecutor,
   entity: string,
@@ -184,7 +202,9 @@ export class PrismaRepository implements RepositoryPort {
     const delegate = getDelegate(this.prisma, config.model);
     const where = mergeTenantWhere(config, ctx, q.where);
 
-    const orderBy = q.orderBy ?? config.defaultOrderBy;
+    const orderBy = normalizeOrderBy(
+      q.orderBy ?? config.defaultOrderBy
+    );
     const data = await delegate.findMany({
       where,
       select: Array.isArray(q.select)
