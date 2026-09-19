@@ -11,6 +11,7 @@ import {
 } from '../utils/thirdwebAuth';
 import { verifyTonSignature, type SignDataPayloadVariant } from '../ton/signData';
 import { verifyTonProofSignature, type TonProofInput } from '../ton/tonProof';
+import { identityPersistenceService } from '../services/identityPersistence';
 
 const TON_PROOF_TTL_SECONDS = Number(process.env.TON_PROOF_TTL_SECONDS ?? 5 * 60);
 const TON_JWT_SECRET = process.env.TON_JWT_SECRET || process.env.JWT_SECRET || process.env.AUTH_PRIVATE_KEY || '';
@@ -168,7 +169,13 @@ function telegramLinkKey(telegramUserId: string) {
   return `${TELEGRAM_LINK_KEY_PREFIX}${telegramUserId}`;
 }
 
-export default function authRoutes(redisClient: RedisClientType) {
+export default function authRoutes(
+  redisClient: RedisClientType,
+  identityService: Pick<
+    typeof identityPersistenceService,
+    'ensureAuthenticatedEvmIdentity'
+  > = identityPersistenceService
+) {
   const router = Router();
 
   router.post('/telegram/link', async (req: Request, res: Response) => {
@@ -325,6 +332,13 @@ export default function authRoutes(redisClient: RedisClientType) {
       const address = await verifySignature(payload, signature);
       console.log('✅ [AUTH VERIFY] Signature verified for address:', address);
 
+      // Successful Thirdweb authentication must establish the complete
+      // Panorama identity before a JWT or refresh session is issued.
+      const identity =
+        await identityService.ensureAuthenticatedEvmIdentity(address);
+      const canonicalAddress = identity.walletAddress;
+      console.log('✅ [AUTH VERIFY] Panorama identity established');
+
       // Generate a JWT token using the full login payload (payload + signature)
       console.log('🎫 [AUTH VERIFY] Generating JWT token...');
       const token = await generateToken({ payload, signature });
@@ -333,8 +347,8 @@ export default function authRoutes(redisClient: RedisClientType) {
       // Create a session in Redis
       const sessionId = createSessionId();
       const sessionData = {
-        userId: address,
-        address,
+        userId: canonicalAddress,
+        address: canonicalAddress,
         sessionId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -353,13 +367,13 @@ export default function authRoutes(redisClient: RedisClientType) {
 
       const response = {
         token,
-        address,
+        address: canonicalAddress,
         sessionId,
       };
 
       console.log('📤 [AUTH VERIFY] Sending response:', {
         tokenIssued: true,
-        address,
+        address: canonicalAddress,
         sessionIssued: true,
       });
 

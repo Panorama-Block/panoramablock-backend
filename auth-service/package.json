@@ -7,7 +7,7 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "node --test -r ts-node/register src/ton/__tests__/*.test.ts src/utils/__tests__/*.test.ts src/middleware/__tests__/*.test.ts"
+    "test": "node --test -r ts-node/register src/ton/__tests__/*.test.ts src/utils/__tests__/*.test.ts src/middleware/__tests__/*.test.ts src/services/__tests__/*.test.ts src/routes/*.contract.test.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
