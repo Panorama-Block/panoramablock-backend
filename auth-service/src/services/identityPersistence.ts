@@ -97,7 +97,7 @@ export class IdentityPersistenceService {
   }
 
   private async request(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PATCH',
     path: string,
     body?: PlainObject,
     idempotencyKey?: string
@@ -215,6 +215,20 @@ export class IdentityPersistenceService {
     return object;
   }
 
+  private async update(
+    entity: string,
+    id: string,
+    body: PlainObject,
+    idempotencyKey: string
+  ): Promise<void> {
+    await this.request(
+      'PATCH',
+      `/v1/${entity}/${encodeURIComponent(id)}`,
+      body,
+      idempotencyKey
+    );
+  }
+
   private validateTenant(
     entity: string,
     record: PlainObject
@@ -291,6 +305,17 @@ export class IdentityPersistenceService {
       ) {
         throw new IdentityPersistenceError(
           'User walletAddress conflict'
+        );
+      }
+
+      if (!walletAddress) {
+        await this.update(
+          'users',
+          address,
+          {
+            walletAddress: address,
+          },
+          `auth:user:wallet-address:${stableKeyPart(address)}`
         );
       }
 

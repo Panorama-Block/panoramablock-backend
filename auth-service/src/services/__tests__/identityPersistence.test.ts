@@ -76,6 +76,23 @@ function makeGateway(
       }
     }
 
+    if (
+      method === 'PATCH' &&
+      pathname === `/database/v1/users/${ADDRESS}`
+    ) {
+      const user = state.users.find(
+        (record) =>
+          String(record.userId || '').toLowerCase() === ADDRESS
+      );
+
+      if (!user) {
+        return response(404, { error: 'not_found' });
+      }
+
+      Object.assign(user, parsedBody);
+      return response(200, user);
+    }
+
     if (method === 'POST') {
       if (pathname.endsWith('/v1/user-profiles')) {
         const record = {
@@ -307,6 +324,67 @@ test('rejects malformed gateway list responses', async () => {
     (error: unknown) =>
       error instanceof IdentityPersistenceError &&
       error.message.includes('invalid list response')
+  );
+});
+
+test('repairs missing walletAddress on an existing User', async () => {
+  const gateway = makeGateway({
+    profiles: [
+      {
+        id: 'profile-1',
+        walletAddress: ADDRESS,
+        tenantId: 'panorama',
+      },
+    ],
+    users: [
+      {
+        userId: ADDRESS,
+        tenantId: 'panorama',
+      },
+    ],
+    wallets: [
+      {
+        id: '00000000-0000-4000-8000-000000000001',
+        userId: ADDRESS,
+        address: ADDRESS,
+        chain: 'EVM',
+        walletType: 'evm',
+        tenantId: 'panorama',
+      },
+    ],
+  });
+
+  await service(
+    gateway.fetchImpl as typeof fetch
+  ).ensureAuthenticatedEvmIdentity(ADDRESS);
+
+  assert.equal(
+    gateway.state.users[0].walletAddress,
+    ADDRESS
+  );
+
+  const patches = gateway.calls.filter(
+    (call) => call.method === 'PATCH'
+  );
+
+  assert.equal(patches.length, 1);
+  assert.equal(
+    new URL(patches[0].url).pathname,
+    `/database/v1/users/${ADDRESS}`
+  );
+  assert.deepEqual(
+    patches[0].body,
+    {
+      walletAddress: ADDRESS,
+    }
+  );
+  assert.ok(Boolean(patches[0].idempotencyKey));
+
+  assert.equal(
+    gateway.calls.filter(
+      (call) => call.method === 'POST'
+    ).length,
+    0
   );
 });
 
