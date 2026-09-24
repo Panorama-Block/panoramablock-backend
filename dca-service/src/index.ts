@@ -8,7 +8,6 @@ import { vaultDcaRoutes } from './routes/vault.dca.routes';
 import { startDCAExecutor } from './jobs/dca.executor';
 import { AuditLogger } from './services/auditLog.service';
 import {
-  forceHTTPS,
   securityHeaders,
   removeSensitiveHeaders,
   securityLogger,
@@ -31,7 +30,8 @@ app.use(cors({
 // Security middleware
 app.use(securityLogger);
 app.use(removeSensitiveHeaders);
-app.use(forceHTTPS);
+// TLS is terminated by PanoramaBlock's ingress infrastructure.
+// Internal service traffic is HTTP by design and must not be redirected to HTTPS.
 app.use(securityHeaders);
 app.use(validateRequestSize(2 * 1024 * 1024)); // 2MB max request size
 

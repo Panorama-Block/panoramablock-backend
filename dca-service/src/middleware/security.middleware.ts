@@ -6,30 +6,6 @@
 import { Request, Response, NextFunction } from 'express';
 
 /**
- * Force HTTPS in production
- * Redirects HTTP requests to HTTPS
- */
-export function forceHTTPS(req: Request, res: Response, next: NextFunction) {
-  // Skip in development
-  if (process.env.NODE_ENV !== 'production') {
-    return next();
-  }
-
-  // Check if request is already HTTPS
-  const isSecure = req.secure ||
-                   req.headers['x-forwarded-proto'] === 'https' ||
-                   req.headers['x-forwarded-ssl'] === 'on';
-
-  if (!isSecure) {
-    const httpsUrl = `https://${req.headers.host}${req.url}`;
-    console.warn(`[Security] Redirecting HTTP to HTTPS: ${req.url}`);
-    return res.redirect(301, httpsUrl);
-  }
-
-  next();
-}
-
-/**
  * Add security headers
  * Implements OWASP recommended security headers
  */
