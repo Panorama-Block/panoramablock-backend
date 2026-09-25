@@ -71,6 +71,37 @@ const entityConfigs: EntityConfig[] = [
     filter: baseQuerySchema
   },
   {
+    collection: 'user-identities',
+    model: 'UserIdentity',
+    primaryKeys: ['id'],
+    tenantField: 'tenantId',
+    defaultOrderBy: { createdAt: 'desc' },
+    create: z
+      .object({
+        id: z.string().uuid().optional(),
+        userId: z.string().min(1),
+        provider: z.string().min(1),
+        providerSubject: z.string().min(1),
+        provenance: jsonRecord.optional(),
+        verifiedAt: isoDate,
+        tenantId: z.string().min(1),
+        createdAt: isoDate.optional(),
+        updatedAt: isoDate.optional()
+      })
+      .strict(),
+    update: z
+      .object({
+        provenance: jsonRecord.optional(),
+        verifiedAt: isoDate.optional(),
+        updatedAt: isoDate.optional()
+      })
+      .strict()
+      .refine((data) => Object.keys(data).length > 0, {
+        message: 'At least one field is required'
+      }),
+    filter: baseQuerySchema
+  },
+  {
     collection: 'conversations',
     model: 'Conversation',
     primaryKeys: ['userId', 'conversationId'],

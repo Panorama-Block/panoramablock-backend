@@ -27,6 +27,7 @@
 - [Local test runbook (Staking + Lending)](./runbooks/LOCAL_TEST_RUNBOOK_STAKING_LENDING.md)
 
 ## Services
+- [User Service architecture](./services/user/ARCHITECTURE.md)
 - [Bridge: TON LayerZero implementation](./services/bridge/TON_LAYERZERO_IMPLEMENTATION.md)
 - [DCA architecture](./services/dca/ARCHITECTURE.md)
 - [DCA documentation](./services/dca/DCA_DOCUMENTATION.md)
