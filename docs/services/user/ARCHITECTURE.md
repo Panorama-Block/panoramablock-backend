@@ -101,6 +101,32 @@ Identity resolution is tenant-scoped.
 
 The Database Gateway remains responsible for enforcing its normal tenant boundary. User Service supplies the authenticated/request tenant context and must also validate returned identity records before treating them as resolved.
 
+## Database Gateway repository
+
+The User Service resolves persisted identities through the existing PanoramaBlock Database Gateway rather than connecting directly to PostgreSQL.
+
+The implemented repository contract performs a tenant-scoped read of `user-identities` using:
+
+    GET /v1/user-identities
+        where = { provider, providerSubject }
+        take = 2
+
+Tenant identity is supplied through the Database Gateway `x-tenant-id` request context rather than duplicated into the caller-provided `where` clause. The Gateway remains responsible for enforcing its tenant boundary.
+
+`take=2` is intentional. The resolver only needs enough records to distinguish:
+
+    0 mappings -> unresolved
+    1 mapping  -> resolved
+    >=2 mappings -> integrity_error
+
+The repository treats transport failures, timeouts, non-success HTTP responses, malformed JSON, malformed response envelopes, and invalid or mismatched identity records as errors. These conditions must not be converted into an unresolved identity.
+
+Returned mappings are checked against the requested tenant, provider and provider subject before they cross the repository boundary.
+
+The repository is read-only at this stage. It does not create, link, relink or delete identities.
+
+This adapter is implemented and locally tested, but its presence does not mean the User Service is deployed or that any production consumer has been cut over to it.
+
 ## Relationship to wallets and profiles
 
 The following concepts remain distinct:
