@@ -127,6 +127,66 @@ The repository is read-only at this stage. It does not create, link, relink or d
 
 This adapter is implemented and locally tested, but its presence does not mean the User Service is deployed or that any production consumer has been cut over to it.
 
+## Internal resolution HTTP boundary
+
+The User Service exposes the resolution operation as:
+
+    POST /v1/identity/resolve
+
+The request requires:
+
+    x-tenant-id: <tenant>
+
+with a JSON body supplying the identity coordinates used for resolution:
+
+    {
+      "provider": "thirdweb-evm" | "telegram" | "ton",
+      "subject": "<authenticated provider subject>"
+    }
+
+Only `provider` and `subject` participate in identity resolution. Additional request-body fields are ignored rather than treated as identity assertions.
+
+The tenant is taken from the request header. A tenant supplied in the request body does not participate in resolution.
+
+Likewise, caller-supplied `userId`, wallet-address or other identity assertions do not participate in resolution. The caller supplies an already-authenticated provider identity; the User Service determines the corresponding PanoramaBlock user from persisted identity mappings.
+
+The HTTP result contract is:
+
+    200 -> resolved
+    404 -> unresolved
+    409 -> integrity_error
+    400 -> invalid request
+    503 -> resolution infrastructure unavailable
+
+An unresolved identity is therefore distinct from an infrastructure failure. Database Gateway configuration errors, transport failures and repository failures must fail closed as service-unavailable conditions rather than being reported as an absent identity.
+
+Malformed JSON is returned through the bounded JSON `400 invalid_request` contract rather than the default Express HTML error response.
+
+Runtime composition is:
+
+    HTTP application
+          |
+          v
+    IdentityResolver
+          |
+          v
+    DatabaseGatewayIdentityRepository
+          |
+          v
+    Database Gateway
+
+The health endpoint remains independent of Database Gateway availability. This permits process health to be observed without converting downstream resolution availability into process startup state.
+
+### Authentication boundary status
+
+The resolution endpoint does not authenticate Thirdweb, Telegram or TON credentials. Those credentials must already have been authenticated by the appropriate provider-specific authentication boundary before their identity coordinates are supplied for resolution.
+
+This stage also does not introduce or claim inbound service-to-service authentication for the User Service HTTP boundary.
+
+Service-to-service authentication remediation is tracked separately as CP-20 and is deliberately deferred. A6 does not duplicate or partially reimplement that security work.
+
+Consequently, successful local implementation of this endpoint does not by itself make it suitable for unrestricted production exposure.
+
 ## Relationship to wallets and profiles
 
 The following concepts remain distinct:
@@ -161,16 +221,21 @@ They remain unchanged until their individual migration gates are reached.
 
 ## Current rollout state
 
-At the initial persistence stage:
+At the current isolated implementation stage:
 
 - `UserIdentity` is additive infrastructure;
+- the read-only Database Gateway repository adapter is implemented and locally tested;
+- the internal resolution HTTP boundary is implemented and locally tested;
+- the runtime application composes the HTTP boundary, `IdentityResolver` and Database Gateway repository;
 - no identity backfill has been performed;
+- the additive `UserIdentity` migration has not been applied to production;
 - no existing consumer depends on User Service;
 - no existing authentication path has been cut over;
+- the User Service has not been deployed as part of this stage;
 - no existing `User`, `Wallet`, or `UserProfile` identifier has been changed;
 - existing production behaviour remains authoritative.
 
-The User Service must first be built and validated in isolation.
+The User Service is being built and validated in isolation before consumer migration.
 
 Consumer migration will then occur incrementally, with shadow, read and authoritative stages where appropriate.
 
