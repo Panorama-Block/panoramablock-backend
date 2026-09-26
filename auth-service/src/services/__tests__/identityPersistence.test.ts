@@ -29,12 +29,14 @@ function makeGateway(
     profiles?: Record<string, unknown>[];
     users?: Record<string, unknown>[];
     wallets?: Record<string, unknown>[];
+    identities?: Record<string, unknown>[];
   }
 ) {
   const state = {
     profiles: [...(initial?.profiles ?? [])],
     users: [...(initial?.users ?? [])],
     wallets: [...(initial?.wallets ?? [])],
+    identities: [...(initial?.identities ?? [])],
   };
 
   const calls: Call[] = [];
@@ -73,6 +75,10 @@ function makeGateway(
 
       if (pathname.endsWith('/v1/wallets')) {
         return response(200, { data: state.wallets });
+      }
+
+      if (pathname.endsWith('/v1/user-identities')) {
+        return response(200, { data: state.identities });
       }
     }
 
@@ -117,6 +123,15 @@ function makeGateway(
         state.wallets.push(record);
         return response(201, record);
       }
+
+      if (pathname.endsWith('/v1/user-identities')) {
+        const record = {
+          id: '00000000-0000-4000-8000-000000000002',
+          ...parsedBody,
+        };
+        state.identities.push(record);
+        return response(201, record);
+      }
     }
 
     return response(500, { error: 'unexpected request' });
@@ -152,6 +167,7 @@ test('creates UserProfile, User and Wallet for a new verified identity', async (
   assert.equal(gateway.state.profiles.length, 1);
   assert.equal(gateway.state.users.length, 1);
   assert.equal(gateway.state.wallets.length, 1);
+  assert.equal(gateway.state.identities.length, 1);
 
   assert.equal(
     gateway.state.profiles[0].walletAddress,
@@ -167,11 +183,28 @@ test('creates UserProfile, User and Wallet for a new verified identity', async (
   assert.equal(gateway.state.wallets[0].chain, 'EVM');
   assert.equal(gateway.state.wallets[0].walletType, 'evm');
 
+  assert.equal(
+    gateway.state.identities[0].userId,
+    ADDRESS
+  );
+  assert.equal(
+    gateway.state.identities[0].provider,
+    'thirdweb-evm'
+  );
+  assert.equal(
+    gateway.state.identities[0].providerSubject,
+    ADDRESS
+  );
+  assert.equal(
+    gateway.state.identities[0].tenantId,
+    'panorama'
+  );
+
   const creates = gateway.calls.filter(
     (call) => call.method === 'POST'
   );
 
-  assert.equal(creates.length, 3);
+  assert.equal(creates.length, 4);
   assert.ok(
     creates.every((call) => Boolean(call.idempotencyKey))
   );
@@ -203,6 +236,15 @@ test('does not create duplicates for an existing complete identity', async () =>
         tenantId: 'panorama',
       },
     ],
+    identities: [
+      {
+        id: '00000000-0000-4000-8000-000000000002',
+        userId: ADDRESS,
+        provider: 'thirdweb-evm',
+        providerSubject: ADDRESS,
+        tenantId: 'panorama',
+      },
+    ],
   });
 
   await service(
@@ -212,6 +254,71 @@ test('does not create duplicates for an existing complete identity', async () =>
   assert.equal(
     gateway.calls.filter((call) => call.method === 'POST')
       .length,
+    0
+  );
+});
+
+test('fails closed when Thirdweb identity is linked to another PB User', async () => {
+  const gateway = makeGateway({
+    profiles: [
+      {
+        id: 'profile-1',
+        walletAddress: ADDRESS,
+        tenantId: 'panorama',
+      },
+    ],
+    users: [
+      {
+        userId: ADDRESS,
+        walletAddress: ADDRESS,
+        tenantId: 'panorama',
+      },
+    ],
+    wallets: [
+      {
+        id: '00000000-0000-4000-8000-000000000001',
+        userId: ADDRESS,
+        address: ADDRESS,
+        chain: 'EVM',
+        walletType: 'evm',
+        tenantId: 'panorama',
+      },
+    ],
+    identities: [
+      {
+        id: '00000000-0000-4000-8000-000000000002',
+        userId:
+          '0x1111111111111111111111111111111111111111',
+        provider: 'thirdweb-evm',
+        providerSubject: ADDRESS,
+        tenantId: 'panorama',
+      },
+    ],
+  });
+
+  await assert.rejects(
+    () =>
+      service(
+        gateway.fetchImpl as typeof fetch
+      ).ensureAuthenticatedEvmIdentity(ADDRESS),
+    (error: unknown) =>
+      error instanceof IdentityPersistenceError &&
+      error.message.includes('UserIdentity userId conflict')
+  );
+
+  assert.equal(
+    gateway.state.identities.length,
+    1
+  );
+
+  assert.equal(
+    gateway.calls.filter(
+      (call) =>
+        call.method === 'POST' &&
+        new URL(call.url).pathname.endsWith(
+          '/v1/user-identities'
+        )
+    ).length,
     0
   );
 });
@@ -380,11 +487,30 @@ test('repairs missing walletAddress on an existing User', async () => {
   );
   assert.ok(Boolean(patches[0].idempotencyKey));
 
+  const posts = gateway.calls.filter(
+    (call) => call.method === 'POST'
+  );
+
+  assert.equal(posts.length, 1);
   assert.equal(
-    gateway.calls.filter(
-      (call) => call.method === 'POST'
-    ).length,
-    0
+    new URL(posts[0].url).pathname,
+    '/database/v1/user-identities'
+  );
+  assert.equal(
+    gateway.state.identities.length,
+    1
+  );
+  assert.equal(
+    gateway.state.identities[0].userId,
+    ADDRESS
+  );
+  assert.equal(
+    gateway.state.identities[0].provider,
+    'thirdweb-evm'
+  );
+  assert.equal(
+    gateway.state.identities[0].providerSubject,
+    ADDRESS
   );
 });
 
@@ -418,4 +544,176 @@ test('rejects conflicting existing User walletAddress', async () => {
   );
 
   assert.equal(gateway.state.wallets.length, 0);
+});
+
+test('accepts concurrent identical UserIdentity establishment', async () => {
+  const gateway = makeGateway({
+    profiles: [
+      {
+        id: 'profile-1',
+        walletAddress: ADDRESS,
+        tenantId: 'panorama',
+      },
+    ],
+    users: [
+      {
+        userId: ADDRESS,
+        walletAddress: ADDRESS,
+        tenantId: 'panorama',
+      },
+    ],
+    wallets: [
+      {
+        id: '00000000-0000-4000-8000-000000000001',
+        userId: ADDRESS,
+        address: ADDRESS,
+        chain: 'EVM',
+        walletType: 'evm',
+        tenantId: 'panorama',
+      },
+    ],
+  });
+
+  let identityGets = 0;
+
+  const concurrentFetch = async (
+    input: string | URL,
+    init?: RequestInit
+  ): Promise<Response> => {
+    const url = String(input);
+    const pathname = new URL(url).pathname;
+    const method = init?.method || 'GET';
+
+    if (
+      method === 'GET' &&
+      pathname.endsWith('/v1/user-identities')
+    ) {
+      identityGets += 1;
+
+      if (identityGets === 1) {
+        return response(200, { data: [] });
+      }
+
+      return response(200, {
+        data: [
+          {
+            id: '00000000-0000-4000-8000-000000000002',
+            userId: ADDRESS,
+            provider: 'thirdweb-evm',
+            providerSubject: ADDRESS,
+            tenantId: 'panorama',
+          },
+        ],
+      });
+    }
+
+    if (
+      method === 'POST' &&
+      pathname.endsWith('/v1/user-identities')
+    ) {
+      return response(409, {
+        error: 'unique_constraint',
+      });
+    }
+
+    return gateway.fetchImpl(input, init);
+  };
+
+  const result = await service(
+    concurrentFetch as typeof fetch
+  ).ensureAuthenticatedEvmIdentity(ADDRESS);
+
+  assert.equal(result.userId, ADDRESS);
+  assert.equal(result.walletAddress, ADDRESS);
+  assert.equal(result.tenantId, 'panorama');
+  assert.equal(identityGets, 2);
+});
+
+test('fails closed when concurrent UserIdentity establishment conflicts', async () => {
+  const gateway = makeGateway({
+    profiles: [
+      {
+        id: 'profile-1',
+        walletAddress: ADDRESS,
+        tenantId: 'panorama',
+      },
+    ],
+    users: [
+      {
+        userId: ADDRESS,
+        walletAddress: ADDRESS,
+        tenantId: 'panorama',
+      },
+    ],
+    wallets: [
+      {
+        id: '00000000-0000-4000-8000-000000000001',
+        userId: ADDRESS,
+        address: ADDRESS,
+        chain: 'EVM',
+        walletType: 'evm',
+        tenantId: 'panorama',
+      },
+    ],
+  });
+
+  let identityGets = 0;
+
+  const concurrentFetch = async (
+    input: string | URL,
+    init?: RequestInit
+  ): Promise<Response> => {
+    const url = String(input);
+    const pathname = new URL(url).pathname;
+    const method = init?.method || 'GET';
+
+    if (
+      method === 'GET' &&
+      pathname.endsWith('/v1/user-identities')
+    ) {
+      identityGets += 1;
+
+      if (identityGets === 1) {
+        return response(200, { data: [] });
+      }
+
+      return response(200, {
+        data: [
+          {
+            id: '00000000-0000-4000-8000-000000000002',
+            userId:
+              '0x1111111111111111111111111111111111111111',
+            provider: 'thirdweb-evm',
+            providerSubject: ADDRESS,
+            tenantId: 'panorama',
+          },
+        ],
+      });
+    }
+
+    if (
+      method === 'POST' &&
+      pathname.endsWith('/v1/user-identities')
+    ) {
+      return response(409, {
+        error: 'unique_constraint',
+      });
+    }
+
+    return gateway.fetchImpl(input, init);
+  };
+
+  await assert.rejects(
+    () =>
+      service(
+        concurrentFetch as typeof fetch
+      ).ensureAuthenticatedEvmIdentity(ADDRESS),
+    (error: unknown) =>
+      error instanceof IdentityPersistenceError &&
+      error.message.includes(
+        'UserIdentity conflict after concurrent establishment'
+      )
+  );
+
+  assert.equal(identityGets, 2);
 });

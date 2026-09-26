@@ -334,6 +334,95 @@ export class IdentityPersistenceService {
     );
   }
 
+  private async ensureUserIdentity(address: string): Promise<void> {
+    const records = await this.list('user-identities', {
+      provider: 'thirdweb-evm',
+      providerSubject: address,
+    });
+
+    if (records.length > 1) {
+      throw new IdentityPersistenceError(
+        'Multiple UserIdentities exist for authenticated identity'
+      );
+    }
+
+    if (records.length === 1) {
+      const identity = records[0];
+      this.validateTenant('UserIdentity', identity);
+
+      if (asString(identity.provider) !== 'thirdweb-evm') {
+        throw new IdentityPersistenceError(
+          'UserIdentity provider conflict'
+        );
+      }
+
+      if (
+        asString(identity.providerSubject).toLowerCase() !==
+        address
+      ) {
+        throw new IdentityPersistenceError(
+          'UserIdentity providerSubject conflict'
+        );
+      }
+
+      if (asString(identity.userId).toLowerCase() !== address) {
+        throw new IdentityPersistenceError(
+          'UserIdentity userId conflict'
+        );
+      }
+
+      return;
+    }
+
+    try {
+      await this.create(
+        'user-identities',
+        {
+          userId: address,
+          provider: 'thirdweb-evm',
+          providerSubject: address,
+          provenance: {
+            source: 'thirdweb-auth',
+            relationship: 'thirdweb-address->pb-user',
+          },
+          verifiedAt: new Date().toISOString(),
+          tenantId: this.tenantId,
+        },
+        `auth:user-identity:create:${stableKeyPart(address)}`
+      );
+    } catch (createError) {
+      const converged = await this.list('user-identities', {
+        provider: 'thirdweb-evm',
+        providerSubject: address,
+      });
+
+      if (converged.length > 1) {
+        throw new IdentityPersistenceError(
+          'Multiple UserIdentities exist for authenticated identity'
+        );
+      }
+
+      if (converged.length === 1) {
+        const identity = converged[0];
+        this.validateTenant('UserIdentity', identity);
+
+        if (
+          asString(identity.provider) === 'thirdweb-evm' &&
+          asString(identity.providerSubject).toLowerCase() === address &&
+          asString(identity.userId).toLowerCase() === address
+        ) {
+          return;
+        }
+
+        throw new IdentityPersistenceError(
+          'UserIdentity conflict after concurrent establishment'
+        );
+      }
+
+      throw createError;
+    }
+  }
+
   private async ensureWallet(address: string): Promise<void> {
     const records = await this.list('wallets', {
       userId: address,
@@ -394,6 +483,7 @@ export class IdentityPersistenceService {
     await this.ensureUserProfile(address);
     await this.ensureUser(address);
     await this.ensureWallet(address);
+    await this.ensureUserIdentity(address);
 
     return {
       userId: address,
