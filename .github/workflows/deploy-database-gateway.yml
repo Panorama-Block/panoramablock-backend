@@ -1,0 +1,138 @@
+name: Deploy Database Gateway
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+env:
+  GHCR_REGISTRY: ghcr.io
+  IMAGE_TAG: ${{ github.sha }}
+  KEY_VAULT_NAME: ${{ secrets.AZURE_KEY_VAULT_NAME }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_PASSWORD }}
+
+      - name: Compute image name
+        id: image
+        run: |
+          OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr "[:upper:]" "[:lower:]")
+          echo "image=${GHCR_REGISTRY}/${OWNER_LOWER}/database-gateway:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        run: |
+          docker build -t "${{ steps.image.outputs.image }}" -f ./database/Dockerfile ./database
+          docker push "${{ steps.image.outputs.image }}"
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Azure login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve database credentials
+        run: |
+          POSTGRES_ADMIN_USER=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-admin-user --query value -o tsv)
+          POSTGRES_ADMIN_PASSWORD=$(az keyvault secret show --vault-name "$KEY_VAULT_NAME" --name postgres-admin-password --query value -o tsv)
+          echo "::add-mask::${POSTGRES_ADMIN_USER}"
+          echo "::add-mask::${POSTGRES_ADMIN_PASSWORD}"
+          echo "POSTGRES_ADMIN_USER=${POSTGRES_ADMIN_USER}" >> "$GITHUB_ENV"
+          echo "POSTGRES_ADMIN_PASSWORD=${POSTGRES_ADMIN_PASSWORD}" >> "$GITHUB_ENV"
+
+      - name: Run database gateway migrations
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          IMAGE: ${{ needs.build.outputs.image }}
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          envs: IMAGE,POSTGRES_ADMIN_USER,POSTGRES_ADMIN_PASSWORD
+          script: |
+            set -euo pipefail
+            cd /opt/panorama/current
+            set -a
+            source .env.production
+            set +a
+            echo "$GHCR_PASSWORD" | docker login "${GHCR_REGISTRY:-ghcr.io}" -u "$GHCR_USERNAME" --password-stdin
+            docker pull "$IMAGE"
+            docker run --rm \
+              -e DATABASE_URL="postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@${POSTGRES_HOST}:5432/panorama_data_gateway?sslmode=require" \
+              "$IMAGE" \
+              npm run migrate:deploy
+
+      - name: Restart database gateway only
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          envs: IMAGE_TAG
+          script: |
+            set -euo pipefail
+            cd /opt/panorama/current
+            docker compose --env-file .env.production -f docker-compose.yml pull database_gateway
+            docker compose --env-file .env.production -f docker-compose.yml up -d database_gateway
+
+      - name: Verify database gateway deployment
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          EXPECTED_IMAGE: ${{ needs.build.outputs.image }}
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          envs: EXPECTED_IMAGE
+          script: |
+            set -euo pipefail
+            cd /opt/panorama/current
+
+            CONTAINER_ID=$(docker compose --env-file .env.production -f docker-compose.yml ps -q database_gateway)
+            if [[ -z "$CONTAINER_ID" ]]; then
+              echo "DATABASE_GATEWAY_CONTAINER=ABSENT"
+              exit 1
+            fi
+
+            RUNNING_IMAGE=$(docker inspect --format "{{.Config.Image}}" "$CONTAINER_ID")
+            echo "DATABASE_GATEWAY_RUNNING_IMAGE=$RUNNING_IMAGE"
+
+            if [[ "$RUNNING_IMAGE" != "$EXPECTED_IMAGE" ]]; then
+              echo "DATABASE_GATEWAY_IMAGE_MATCH=FAIL"
+              exit 1
+            fi
+            echo "DATABASE_GATEWAY_IMAGE_MATCH=PASS"
+
+            for attempt in $(seq 1 30); do
+              HEALTH=$(docker inspect --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}" "$CONTAINER_ID")
+              if [[ "$HEALTH" == "healthy" ]] && curl --fail --silent --show-error http://127.0.0.1:8080/health >/dev/null; then
+                echo "DATABASE_GATEWAY_CONTAINER_HEALTH=PASS"
+                echo "DATABASE_GATEWAY_HTTP_HEALTH=PASS"
+                exit 0
+              fi
+              sleep 2
+            done
+
+            echo "DATABASE_GATEWAY_DEPLOYMENT_VERIFICATION=FAIL"
+            docker inspect --format "status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}" "$CONTAINER_ID"
+            exit 1
